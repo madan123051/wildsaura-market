@@ -25,7 +25,7 @@ import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth
 import type { UserProfile, CartItem } from "@/types";
 import { DRISHYA_APP_URL, CATEGORIES } from "@/types";
 
-export default function Navbar() {
+function Navbar() {
   const router = useRouter();
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -458,3 +458,6 @@ export default function Navbar() {
     </header>
   );
 }
+
+export default Navbar;
+export { Navbar };

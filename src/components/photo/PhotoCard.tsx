@@ -34,7 +34,7 @@ export function PhotoCard({ photo, onAddToCart, className }: PhotoCardProps) {
           <div className="absolute top-3 right-3">
             <Badge variant="info" className="backdrop-blur-sm bg-white/80 text-brand-dark gap-1">
               <Star size={10} className="fill-brand-secondary text-brand-secondary" />
-              {photo.aiQualityScore.toFixed(1)}
+              {(photo.aiQualityScore ?? 0).toFixed(1)}
             </Badge>
           </div>
         </div>

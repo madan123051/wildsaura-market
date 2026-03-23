@@ -54,6 +54,7 @@ export interface StockPhoto {
   viewCount?: number;
   downloadCount?: number;
   qualityScore?: number;
+  aiQualityScore?: number;
   marketDemand?: MarketDemand;
   width?: number;
   height?: number;
@@ -147,3 +148,16 @@ export const CATEGORIES: {
   { value: "aerial", label: "Aerial", icon: "🚁", description: "Drone shots, bird eye view" },
   { value: "macro", label: "Macro", icon: "🔬", description: "Close-up, tiny details" },
 ];
+
+// ─── Photo Purchase ───────────────────────────────────
+export interface PhotoPurchase {
+  purchaseId: string;
+  buyerId: string;
+  photoId: string;
+  photoTitle: string;
+  amountNPR: number;
+  paymentMethod: PaymentMethod;
+  transactionRef: string;
+  status: "pending" | "completed" | "failed" | "refunded";
+  purchasedAt: Date;
+}
