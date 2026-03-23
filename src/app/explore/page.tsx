@@ -132,5 +132,5 @@ export default function ExplorePage() {
     <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
       <ExploreContent />
     </Suspense>
-  );r
+  );
 }
