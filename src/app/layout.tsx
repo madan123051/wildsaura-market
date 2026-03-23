@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
-import { Toaster } from "react-hot-toast";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import ClientProviders from "@/components/ClientProviders";
 import "./globals.css";
 
 const inter = Inter({
@@ -39,21 +39,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className="font-sans bg-brand-light text-brand-dark min-h-screen flex flex-col">
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 3000,
-            style: {
-              borderRadius: "12px",
-              background: "#0D1B2A",
-              color: "#fff",
-              fontSize: "14px",
-            },
-          }}
-        />
-        <Navbar />
-        <main className="flex-1">{children}</main>
-        <Footer />
+        <ClientProviders>
+          <Navbar />
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </ClientProviders>
       </body>
     </html>
   );
