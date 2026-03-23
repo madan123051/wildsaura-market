@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import admin from "@/lib/firebaseAdmin";
 import { adminAuth, adminDb } from "@/lib/firebaseAdmin";
 import { generateTransactionId } from "@/lib/utils";
 import type { ApiResponse, PhotoPurchase } from "@/types";
@@ -41,16 +42,16 @@ export async function POST(req: NextRequest) {
 
     // ── Save pending purchase in Firestore ──────────────────────
     const purchaseRef = adminDb.collection("purchases").doc(transactionUuid);
-    const purchase: Omit<PhotoPurchase, "purchasedAt"> & { purchasedAt: FirebaseFirestore.FieldValue } = {
+    const purchase = {
       purchaseId:     transactionUuid,
       buyerId:        decoded.uid,
       photoId,
       photoTitle:     photo.title as string,
       amountNPR:      amount,
-      paymentMethod:  "esewa",
+      paymentMethod:  "esewa" as const,
       transactionRef: transactionUuid,
-      status:         "pending",
-      purchasedAt:    adminDb.FieldValue ? (adminDb as unknown as { FieldValue: { serverTimestamp: () => unknown } }).FieldValue.serverTimestamp() : new Date() as unknown as FirebaseFirestore.FieldValue,
+      status:         "pending" as const,
+      purchasedAt:    admin.firestore.FieldValue.serverTimestamp(),
     };
     await purchaseRef.set(purchase);
 
