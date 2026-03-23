@@ -1,15 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 import { collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { ImageGrid } from "@/components/photo/ImageGrid";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
 import { useCart } from "@/hooks/useCart";
 import type { StockPhoto, PhotoCategory, CartItem } from "@/types";
 
@@ -25,7 +24,7 @@ const CATEGORIES: { label: string; value: PhotoCategory | "all" }[] = [
   { label: "✈️ Aerial",    value: "aerial" },
 ];
 
-export default function ExplorePage() {
+function ExploreContent() {
   const searchParams = useSearchParams();
   const [photos,       setPhotos]      = useState<StockPhoto[]>([]);
   const [loading,      setLoading]     = useState(true);
@@ -38,7 +37,6 @@ export default function ExplorePage() {
 
   useEffect(() => {
     fetchPhotos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategory]);
 
   const fetchPhotos = async () => {
@@ -79,7 +77,6 @@ export default function ExplorePage() {
       <Navbar cartCount={count} />
 
       <main className="flex-1 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
-        {/* Header */}
         <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-8">
           <div>
             <h1 className="font-heading text-3xl font-bold text-brand-dark">Explore Photos</h1>
@@ -95,7 +92,6 @@ export default function ExplorePage() {
           </div>
         </div>
 
-        {/* Category Tabs */}
         <div className="flex gap-2 flex-wrap mb-8">
           {CATEGORIES.map((cat) => (
             <button
@@ -112,7 +108,6 @@ export default function ExplorePage() {
           ))}
         </div>
 
-        {/* Grid */}
         {loading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -130,4 +125,12 @@ export default function ExplorePage() {
       <Footer />
     </div>
   );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <ExploreContent />
+    </Suspense>
+  );r
 }
