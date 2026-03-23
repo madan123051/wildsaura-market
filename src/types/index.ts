@@ -1,103 +1,125 @@
-// ==========================================
-// 1. USER MODEL (Drishya App & Marketplace)
-// ==========================================
+// ─── Photo Category ───────────────────────────────────
+export type PhotoCategory =
+  | "nature"
+  | "wildlife"
+  | "landscape"
+  | "culture"
+  | "adventure"
+  | "street"
+  | "aerial"
+  | "macro";
+
+// ─── User ─────────────────────────────────────────────
+export type UserRole = "creator" | "buyer" | "admin";
+
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
-  avatarUrl?: string;
-  isVerified: boolean;        // KYC Status (true = Nagarikta verified)
-  walletPoints: number;       // Total Points / Earnings (e.g. 1000)
-  esewaId?: string;           // eSewa number for receiving payouts
-  role: "creator" | "admin";
-  createdAt: Date | FirebaseTimestamp;
+  avatarUrl: string;
+  bio?: string;
+  website?: string;
+  socialLinks?: {
+    instagram?: string;
+    twitter?: string;
+    facebook?: string;
+  };
+  isVerified: boolean;
+  walletPoints: number;
+  role: UserRole;
+  totalSales?: number;
+  totalPhotos?: number;
+  createdAt: Date;
 }
 
-// ==========================================
-// 2. PHOTO MODEL (Gemini AI + Shutterstock Ready)
-// ==========================================
+// ─── Stock Photo ──────────────────────────────────────
+export type PhotoStatus = "pending" | "approved" | "rejected";
+export type MarketDemand = "High" | "Medium" | "Low";
+
 export interface StockPhoto {
-  id: string;                 // Firestore Document ID
-  ownerId: string;            // User.uid
-  imageUrl: string;           // Firebase Storage – high-res
-  thumbnailUrl: string;       // Compressed / WebP for fast loading
-
-  // AI Generated Metadata (Gemini)
-  title: string;              // e.g. "Pashupatinath Evening Aarti"
-  description?: string;       // 2-3 sentence description
-  tags: string[];             // ["Nepal", "Culture", "Temple", ...]
-  category: PhotoCategory;    // Primary category
-  aiQualityScore: number;     // 1–10 (market demand + clarity)
-
-  // E-commerce
-  priceNPR: number;           // Selling price in NPR
-  status: "pending" | "approved" | "rejected";
+  id: string;
+  ownerId: string;
+  ownerName?: string;
+  ownerAvatar?: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+  title: string;
+  description: string;
+  tags: string[];
+  category: PhotoCategory;
+  priceNPR: number;
+  status: PhotoStatus;
   isPublic: boolean;
   salesCount: number;
-  resolution?: string;        // e.g. "4032x3024"
-  fileSizeMB?: number;
-  createdAt: Date | FirebaseTimestamp;
+  viewCount?: number;
+  downloadCount?: number;
+  qualityScore?: number;
+  marketDemand?: MarketDemand;
+  width?: number;
+  height?: number;
+  fileSize?: number;
+  createdAt: Date;
+  updatedAt?: Date;
 }
 
-// ==========================================
-// 3. PHOTO CATEGORIES
-// ==========================================
-export type PhotoCategory =
-  | "nature"
-  | "wildlife"
-  | "culture"
-  | "food"
-  | "architecture"
-  | "people"
-  | "adventure"
-  | "abstract"
-  | "aerial"
-  | "other";
-
-// ==========================================
-// 4. PAYOUT & WALLET MODEL
-// ==========================================
-export interface PayoutRequest {
-  requestId: string;
-  userId: string;
-  requestedPoints: number;    // e.g. 1000
-  payoutMethod: "esewa" | "khalti" | "bank";
-  payoutDetails: string;      // Phone number or bank account info
-  status: "pending" | "processing" | "completed" | "rejected";
-  requestedAt: Date | FirebaseTimestamp;
-  processedAt?: Date | FirebaseTimestamp;
-  adminNote?: string;
-}
-
-// ==========================================
-// 5. PURCHASE / LICENSE MODEL
-// ==========================================
-export interface PhotoPurchase {
-  purchaseId: string;
-  buyerId: string;
-  photoId: string;
-  photoTitle: string;
-  amountNPR: number;
-  paymentMethod: "esewa" | "khalti" | "wallet";
-  transactionRef: string;     // eSewa / Khalti transaction token
-  status: "pending" | "completed" | "failed" | "refunded";
-  downloadUrl?: string;       // Signed URL (expires in 24h)
-  purchasedAt: Date | FirebaseTimestamp;
-}
-
-// ==========================================
-// 6. CART ITEM (Client-side only)
-// ==========================================
+// ─── Cart ─────────────────────────────────────────────
 export interface CartItem {
   photoId: string;
   title: string;
   thumbnailUrl: string;
   priceNPR: number;
+  ownerName?: string;
 }
 
-// ==========================================
-// 7. API RESPONSE WRAPPER
-// ==========================================
+// ─── Order ────────────────────────────────────────────
+export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
+export type PaymentMethod = "esewa" | "khalti" | "wallet_points";
+
+export interface Order {
+  id: string;
+  buyerId: string;
+  buyerEmail: string;
+  items: OrderItem[];
+  totalNPR: number;
+  status: OrderStatus;
+  paymentMethod: PaymentMethod;
+  paymentId?: string;
+  createdAt: Date;
+  completedAt?: Date;
+}
+
+export interface OrderItem {
+  photoId: string;
+  title: string;
+  thumbnailUrl: string;
+  priceNPR: number;
+  ownerId: string;
+}
+
+// ─── Download ─────────────────────────────────────────
+export interface Download {
+  id: string;
+  orderId: string;
+  photoId: string;
+  buyerId: string;
+  imageUrl: string;
+  title: string;
+  thumbnailUrl: string;
+  downloadedAt?: Date;
+  purchasedAt: Date;
+}
+
+// ─── Partner License ──────────────────────────────────
+export interface PartnerLicense {
+  partnerId: string;
+  photoId: string;
+  externalId: string;
+  status: "submitted" | "approved" | "rejected" | "live";
+  royaltyPercent: number;
+  submittedAt: Date;
+}
+
+// ─── API Response ─────────────────────────────────────
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
@@ -105,17 +127,23 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
-// ==========================================
-// 8. PARTNER / EXTERNAL LICENSE
-// ==========================================
-export interface PartnerLicense {
-  partnerId: "shutterstock" | "adobe_stock" | "getty";
-  photoId: string;
-  externalId?: string;        // ID on partner platform after submission
-  status: "submitted" | "approved" | "rejected" | "live";
-  royaltyPercent: number;     // e.g. 30 (%)
-  submittedAt: Date | FirebaseTimestamp;
-}
+// ─── Drishya App Config ───────────────────────────────
+export const DRISHYA_APP_URL =
+  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://lumina-drishya.vercel.app";
 
-// Alias for Firebase Timestamp compat
-type FirebaseTimestamp = { seconds: number; nanoseconds: number };
+// ─── Categories Config ────────────────────────────────
+export const CATEGORIES: {
+  value: PhotoCategory;
+  label: string;
+  icon: string;
+  description: string;
+}[] = [
+  { value: "nature", label: "Nature", icon: "🌿", description: "Forests, flowers, plants" },
+  { value: "wildlife", label: "Wildlife", icon: "🦁", description: "Animals in their habitat" },
+  { value: "landscape", label: "Landscape", icon: "🏔️", description: "Mountains, valleys, scenery" },
+  { value: "culture", label: "Culture", icon: "🏛️", description: "Traditions, festivals, heritage" },
+  { value: "adventure", label: "Adventure", icon: "🧗", description: "Trekking, sports, extreme" },
+  { value: "street", label: "Street", icon: "🏙️", description: "Urban life, people, city" },
+  { value: "aerial", label: "Aerial", icon: "🚁", description: "Drone shots, bird eye view" },
+  { value: "macro", label: "Macro", icon: "🔬", description: "Close-up, tiny details" },
+];
