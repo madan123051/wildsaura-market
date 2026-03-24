@@ -31,7 +31,7 @@ import {
   limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { Photo } from "@/types";
+import type { StockPhoto } from "@/types";
 
 interface PurchaseRecord {
   id: string;
@@ -47,8 +47,8 @@ export default function DashboardPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
-  const [downloads, setDownloads] = useState<Photo[]>([]);
-  const [favorites, setFavorites] = useState<Photo[]>([]);
+  const [downloads, setDownloads] = useState<StockPhoto[]>([]);
+  const [favorites, setFavorites] = useState<StockPhoto[]>([]);
   const [stats, setStats] = useState({
     totalPurchases: 0,
     totalDownloads: 0,
@@ -109,7 +109,7 @@ export default function DashboardPage() {
           const photosSnap = await getDocs(photosQuery);
           setDownloads(
             photosSnap.docs.map(
-              (doc) => ({ id: doc.id, ...doc.data() } as Photo)
+              (doc) => ({ id: doc.id, ...doc.data() } as StockPhoto)
             )
           );
         }
@@ -133,7 +133,7 @@ export default function DashboardPage() {
           const favPhotosSnap = await getDocs(favPhotosQuery);
           setFavorites(
             favPhotosSnap.docs.map(
-              (doc) => ({ id: doc.id, ...doc.data() } as Photo)
+              (doc) => ({ id: doc.id, ...doc.data() } as StockPhoto)
             )
           );
         }
@@ -535,7 +535,7 @@ export default function DashboardPage() {
                           {photo.title}
                         </p>
                         <p className="text-sm text-emerald-600">
-                          Rs. {photo.price}
+                          Rs. {photo.priceNPR}
                         </p>
                       </div>
                     </Link>
