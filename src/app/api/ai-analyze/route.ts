@@ -1,157 +1,157 @@
-// =============================================================================
-// /api/ai-analyze — Gemini 1.5 Flash Photo Analysis for WildSaura Market
-// =============================================================================
-// Called by Drishya when a user wants to sell a photo.
-// Analyzes the image and returns: title, description, tags, category,
-// quality_score, and market_demand.
-// =============================================================================
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// ─── CORS (Drishya is on a different origin) ────────────────────────────────
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
-
-/** Preflight handler */
-export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders });
-}
-
-// ─── Category mapping (AI guess → PhotoCategory) ────────────────────────────
-// If Gemini returns a close match that isn't in our exact list, we map it.
-
+// Valid PhotoCategory values that match the frontend types
 const VALID_CATEGORIES = [
-  "nature", "wildlife", "landscape", "culture",
-  "adventure", "street", "aerial", "macro",
+  "nature",
+  "wildlife",
+  "landscape",
+  "street",
+  "culture",
+  "macro",
+  "aerial",
+  "underwater",
+  "adventure",
 ] as const;
 
+// Map common AI-generated categories to our valid PhotoCategory values
 const CATEGORY_ALIASES: Record<string, string> = {
-  // AI might return these — map them to our PhotoCategory values
-  food: "culture",
-  architecture: "street",
-  people: "street",
-  urban: "street",
-  city: "street",
-  abstract: "macro",
-  closeup: "macro",
-  "close-up": "macro",
-  mountain: "landscape",
-  mountains: "landscape",
-  scenery: "landscape",
   animal: "wildlife",
   animals: "wildlife",
   bird: "wildlife",
   birds: "wildlife",
   insect: "macro",
   insects: "macro",
-  flower: "nature",
-  flowers: "nature",
-  forest: "nature",
+  flower: "macro",
+  flowers: "macro",
   plant: "nature",
   plants: "nature",
   tree: "nature",
   trees: "nature",
+  forest: "nature",
+  mountain: "landscape",
+  mountains: "landscape",
+  ocean: "landscape",
+  sea: "landscape",
+  beach: "landscape",
+  sunset: "landscape",
+  sunrise: "landscape",
+  city: "street",
+  urban: "street",
+  architecture: "street",
+  building: "street",
+  buildings: "street",
+  people: "culture",
+  person: "culture",
+  portrait: "culture",
+  festival: "culture",
+  tradition: "culture",
+  food: "culture",
+  abstract: "macro",
+  closeup: "macro",
+  "close-up": "macro",
   drone: "aerial",
+  sky: "aerial",
+  flying: "aerial",
+  water: "underwater",
+  diving: "underwater",
+  marine: "underwater",
+  fish: "underwater",
+  coral: "underwater",
   sport: "adventure",
   sports: "adventure",
-  trekking: "adventure",
   hiking: "adventure",
-  festival: "culture",
-  temple: "culture",
-  tradition: "culture",
-  other: "nature", // safe fallback
+  climbing: "adventure",
+  extreme: "adventure",
+  travel: "adventure",
+  other: "nature",
 };
 
-function resolveCategory(raw: string): string {
-  const lower = (raw || "").toLowerCase().trim();
+function normalizeCategory(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  // Direct match
   if ((VALID_CATEGORIES as readonly string[]).includes(lower)) return lower;
-  return CATEGORY_ALIASES[lower] || "nature";
+  // Alias match
+  if (CATEGORY_ALIASES[lower]) return CATEGORY_ALIASES[lower];
+  // Default fallback
+  return "nature";
 }
-
-// ─── POST /api/ai-analyze ───────────────────────────────────────────────────
 
 export async function POST(req: Request) {
   try {
+    // CORS headers
+    const headers = {
+      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    };
+
+    // Handle preflight
+    if (req.method === "OPTIONS") {
+      return new NextResponse(null, { status: 204, headers });
+    }
+
     const { imageUrl } = await req.json();
 
     if (!imageUrl || typeof imageUrl !== "string") {
       return NextResponse.json(
         { error: "imageUrl is required and must be a string" },
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers }
       );
     }
 
-    // 1. Initialize Gemini 1.5 Flash
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY not configured" },
+        { status: 500, headers }
+      );
+    }
+
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 2. Professional Marketplace Prompt — categories match PhotoCategory type
     const prompt = `
-You are a professional stock photography analyst for a marketplace like Shutterstock.
-Analyze this image and return ONLY valid JSON (no markdown, no code blocks, no explanation).
+      Analyze this image for a professional stock photography marketplace.
+      Provide the following in a strict JSON format (no markdown, no code blocks):
+      {
+        "title": "A descriptive 5-10 word title",
+        "description": "A brief 2-sentence explanation of the photo",
+        "tags": ["array", "of", "20", "relevant", "SEO", "keywords"],
+        "category": "ONE of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure",
+        "quality_score": 8,
+        "market_demand": "High"
+      }
+      
+      IMPORTANT: 
+      - category MUST be exactly one of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure
+      - quality_score must be 1-10
+      - market_demand must be "High", "Medium", or "Low"
+      - Return ONLY valid JSON, no extra text
+    `;
 
-Available categories: nature, wildlife, landscape, culture, adventure, street, aerial, macro
+    const imageResp = await fetch(imageUrl).then((res) => {
+      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+      return res.arrayBuffer();
+    });
 
-Category definitions:
-- nature: Forests, flowers, plants, trees, greenery, gardens
-- wildlife: Animals, birds, insects in their natural habitat
-- landscape: Mountains, valleys, rivers, scenery, panoramic views
-- culture: Traditions, festivals, temples, heritage, food, local life
-- adventure: Trekking, sports, extreme activities, outdoor challenges
-- street: Urban life, city streets, architecture, people, buildings
-- aerial: Drone shots, bird's eye views, top-down perspectives
-- macro: Close-up photography, tiny details, textures, patterns
+    // Detect mime type from URL
+    const extension = imageUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
+    };
+    const mimeType = mimeMap[extension || ""] || "image/jpeg";
 
-Return this exact JSON structure:
-{
-  "title": "A descriptive 5-10 word professional title",
-  "description": "A brief 2-sentence description suitable for a stock photo marketplace listing. Describe what buyers will see and potential use cases.",
-  "tags": ["keyword1", "keyword2", "...up to 20 relevant SEO keywords"],
-  "category": "one_of_the_categories_listed_above",
-  "quality_score": 8,
-  "market_demand": "High"
-}
-
-Scoring rules:
-- title: Professional, descriptive, 5-10 words. No generic titles.
-- description: 2 sentences — what the photo shows + potential commercial use.
-- tags: Up to 20 relevant SEO keywords as an array of lowercase strings.
-- category: MUST be exactly one of: nature, wildlife, landscape, culture, adventure, street, aerial, macro
-- quality_score: Integer 1-10 based on:
-    * Clarity & sharpness (2 pts)
-    * Composition & framing (2 pts)
-    * Lighting & exposure (2 pts)
-    * Commercial appeal (2 pts)
-    * Uniqueness & creativity (2 pts)
-- market_demand: "High", "Medium", or "Low" based on commercial viability and current trends.
-
-Return ONLY the JSON object.`;
-
-    // 3. Fetch image and convert to base64
-    const imageResp = await fetch(imageUrl);
-    if (!imageResp.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch image from URL" },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    const imageBuffer = await imageResp.arrayBuffer();
-    const contentType = imageResp.headers.get("content-type") || "image/jpeg";
-
-    // 4. Send to Gemini
     const result = await model.generateContent([
       prompt,
       {
         inlineData: {
-          data: Buffer.from(imageBuffer).toString("base64"),
-          mimeType: contentType,
+          data: Buffer.from(imageResp).toString("base64"),
+          mimeType,
         },
       },
     ]);
@@ -159,34 +159,58 @@ Return ONLY the JSON object.`;
     const response = await result.response;
     const text = response.text();
 
-    // 5. Clean and parse JSON response
+    // Clean and parse JSON
     const cleanText = text
       .replace(/```json\s*/gi, "")
       .replace(/```\s*/g, "")
       .trim();
+    const parsed = JSON.parse(cleanText);
 
-    const analysisResult = JSON.parse(cleanText);
+    // Normalize category to match PhotoCategory type
+    parsed.category = normalizeCategory(parsed.category || "nature");
 
-    // 6. Validate & sanitize — use resolveCategory for smart mapping
-    const sanitized = {
-      title: String(analysisResult.title || "").slice(0, 120),
-      description: String(analysisResult.description || "").slice(0, 500),
-      tags: Array.isArray(analysisResult.tags)
-        ? analysisResult.tags.slice(0, 20).map((t: unknown) => String(t).toLowerCase().trim())
-        : [],
-      category: resolveCategory(analysisResult.category),
-      quality_score: Math.min(10, Math.max(1, Math.round(Number(analysisResult.quality_score) || 5))),
-      market_demand: ["High", "Medium", "Low"].includes(analysisResult.market_demand)
-        ? analysisResult.market_demand
-        : "Medium",
-    };
+    // Validate quality_score
+    parsed.quality_score = Math.min(
+      10,
+      Math.max(1, parseInt(parsed.quality_score) || 7)
+    );
 
-    return NextResponse.json(sanitized, { headers: corsHeaders });
+    // Validate market_demand
+    if (!["High", "Medium", "Low"].includes(parsed.market_demand)) {
+      parsed.market_demand = "Medium";
+    }
+
+    // Sanitize tags
+    if (Array.isArray(parsed.tags)) {
+      parsed.tags = parsed.tags
+        .map((t: unknown) => String(t).toLowerCase().trim())
+        .filter((t: string) => t.length > 0)
+        .slice(0, 25);
+    } else {
+      parsed.tags = [];
+    }
+
+    return NextResponse.json(parsed, { headers });
   } catch (error) {
     console.error("AI Analysis Error:", error);
     return NextResponse.json(
-      { error: "AI Processing Failed. Please try again." },
-      { status: 500, headers: corsHeaders }
+      {
+        error: "AI Processing Failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
     );
   }
+}
+
+// Handle OPTIONS preflight
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
 }
