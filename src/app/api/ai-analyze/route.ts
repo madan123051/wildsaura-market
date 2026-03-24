@@ -1,7 +1,7 @@
 // =============================================================================
 // /api/ai-analyze — Gemini 1.5 Flash Photo Analysis for WildSaura Market
 // =============================================================================
-// Called by Lumina (Drishya) when a user wants to sell a photo.
+// Called by Drishya when a user wants to sell a photo.
 // Analyzes the image and returns: title, description, tags, category,
 // quality_score, and market_demand.
 // =============================================================================
@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
-// ─── CORS (Lumina is on a different origin) ─────────────────────────────────
+// ─── CORS (Drishya is on a different origin) ────────────────────────────────
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": process.env.ALLOWED_ORIGIN || "*",
@@ -22,6 +22,57 @@ const corsHeaders = {
 /** Preflight handler */
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
+}
+
+// ─── Category mapping (AI guess → PhotoCategory) ────────────────────────────
+// If Gemini returns a close match that isn't in our exact list, we map it.
+
+const VALID_CATEGORIES = [
+  "nature", "wildlife", "landscape", "culture",
+  "adventure", "street", "aerial", "macro",
+] as const;
+
+const CATEGORY_ALIASES: Record<string, string> = {
+  // AI might return these — map them to our PhotoCategory values
+  food: "culture",
+  architecture: "street",
+  people: "street",
+  urban: "street",
+  city: "street",
+  abstract: "macro",
+  closeup: "macro",
+  "close-up": "macro",
+  mountain: "landscape",
+  mountains: "landscape",
+  scenery: "landscape",
+  animal: "wildlife",
+  animals: "wildlife",
+  bird: "wildlife",
+  birds: "wildlife",
+  insect: "macro",
+  insects: "macro",
+  flower: "nature",
+  flowers: "nature",
+  forest: "nature",
+  plant: "nature",
+  plants: "nature",
+  tree: "nature",
+  trees: "nature",
+  drone: "aerial",
+  sport: "adventure",
+  sports: "adventure",
+  trekking: "adventure",
+  hiking: "adventure",
+  festival: "culture",
+  temple: "culture",
+  tradition: "culture",
+  other: "nature", // safe fallback
+};
+
+function resolveCategory(raw: string): string {
+  const lower = (raw || "").toLowerCase().trim();
+  if ((VALID_CATEGORIES as readonly string[]).includes(lower)) return lower;
+  return CATEGORY_ALIASES[lower] || "nature";
 }
 
 // ─── POST /api/ai-analyze ───────────────────────────────────────────────────
@@ -40,12 +91,22 @@ export async function POST(req: Request) {
     // 1. Initialize Gemini 1.5 Flash
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 2. Professional Marketplace Prompt
+    // 2. Professional Marketplace Prompt — categories match PhotoCategory type
     const prompt = `
 You are a professional stock photography analyst for a marketplace like Shutterstock.
 Analyze this image and return ONLY valid JSON (no markdown, no code blocks, no explanation).
 
-Available categories: nature, wildlife, culture, food, architecture, people, adventure, abstract, aerial, other
+Available categories: nature, wildlife, landscape, culture, adventure, street, aerial, macro
+
+Category definitions:
+- nature: Forests, flowers, plants, trees, greenery, gardens
+- wildlife: Animals, birds, insects in their natural habitat
+- landscape: Mountains, valleys, rivers, scenery, panoramic views
+- culture: Traditions, festivals, temples, heritage, food, local life
+- adventure: Trekking, sports, extreme activities, outdoor challenges
+- street: Urban life, city streets, architecture, people, buildings
+- aerial: Drone shots, bird's eye views, top-down perspectives
+- macro: Close-up photography, tiny details, textures, patterns
 
 Return this exact JSON structure:
 {
@@ -61,7 +122,7 @@ Scoring rules:
 - title: Professional, descriptive, 5-10 words. No generic titles.
 - description: 2 sentences — what the photo shows + potential commercial use.
 - tags: Up to 20 relevant SEO keywords as an array of lowercase strings.
-- category: MUST be exactly one of: nature, wildlife, culture, food, architecture, people, adventure, abstract, aerial, other
+- category: MUST be exactly one of: nature, wildlife, landscape, culture, adventure, street, aerial, macro
 - quality_score: Integer 1-10 based on:
     * Clarity & sharpness (2 pts)
     * Composition & framing (2 pts)
@@ -106,21 +167,14 @@ Return ONLY the JSON object.`;
 
     const analysisResult = JSON.parse(cleanText);
 
-    // 6. Validate & sanitize the response
-    const validCategories = [
-      "nature", "wildlife", "culture", "food", "architecture",
-      "people", "adventure", "abstract", "aerial", "other",
-    ];
-
+    // 6. Validate & sanitize — use resolveCategory for smart mapping
     const sanitized = {
       title: String(analysisResult.title || "").slice(0, 120),
       description: String(analysisResult.description || "").slice(0, 500),
       tags: Array.isArray(analysisResult.tags)
         ? analysisResult.tags.slice(0, 20).map((t: unknown) => String(t).toLowerCase().trim())
         : [],
-      category: validCategories.includes(analysisResult.category)
-        ? analysisResult.category
-        : "other",
+      category: resolveCategory(analysisResult.category),
       quality_score: Math.min(10, Math.max(1, Math.round(Number(analysisResult.quality_score) || 5))),
       market_demand: ["High", "Medium", "Low"].includes(analysisResult.market_demand)
         ? analysisResult.market_demand
