@@ -27,7 +27,6 @@ import {
 import {
   collection,
   query,
-  where,
   orderBy,
   limit,
   getDocs,
@@ -238,11 +237,10 @@ export default function HomePage() {
       setLoading(true);
       const photosRef = collection(db, "photos");
 
-      // Single efficient query — fetch all approved public photos
+      // Fetch all photos (simple query — no composite index needed)
+      // Filter client-side for status/isPublic since Drishya may not set these fields yet
       const allQuery = query(
         photosRef,
-        where("status", "==", "approved"),
-        where("isPublic", "==", true),
         orderBy("createdAt", "desc"),
         limit(500)
       );
