@@ -22,6 +22,7 @@ import {
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { clearSessionCookie } from "@/lib/session";
 import type { UserProfile, CartItem } from "@/types";
 import { DRISHYA_APP_URL, CATEGORIES } from "@/types";
 
@@ -115,6 +116,7 @@ function Navbar() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      clearSessionCookie();
       setShowUserMenu(false);
       setShowMobileMenu(false);
       router.push("/");
@@ -258,6 +260,14 @@ function Navbar() {
                     >
                       <LayoutDashboard className="w-4 h-4" />
                       Dashboard
+                    </Link>
+                    <Link
+                      href="/profile"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <User className="w-4 h-4" />
+                      Profile
                     </Link>
                     <Link
                       href="/downloads"
@@ -415,6 +425,14 @@ function Navbar() {
                   >
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
+                  </Link>
+                  <Link
+                    href="/profile"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    Profile
                   </Link>
                   <Link
                     href="/downloads"
