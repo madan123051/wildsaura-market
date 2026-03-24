@@ -130,7 +130,7 @@ export interface ApiResponse<T = unknown> {
 
 // ─── Drishya App Config ───────────────────────────────
 export const DRISHYA_APP_URL =
-  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://lumina-drishya.vercel.app";
+  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://drishya.wildsaura.com";
 
 // ─── Categories Config ────────────────────────────────
 export const CATEGORIES: {

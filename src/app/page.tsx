@@ -38,7 +38,7 @@ import { cn, formatNPR } from "@/lib/utils";
 import type { StockPhoto, PhotoCategory } from "@/types";
 
 const DRISHYA_APP_URL =
-  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://lumina-drishya.vercel.app";
+  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://drishya.wildsaura.com";
 
 const CATEGORIES: {
   value: PhotoCategory;
