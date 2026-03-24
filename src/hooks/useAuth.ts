@@ -13,6 +13,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import type { UserProfile } from "@/types";
 
 interface AuthState {
@@ -50,8 +51,10 @@ export function useAuth(): AuthState & AuthActions {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        setSessionCookie(firebaseUser.uid);
         await fetchProfile(firebaseUser.uid);
       } else {
+        clearSessionCookie();
         setProfile(null);
       }
       setLoading(false);
@@ -119,6 +122,7 @@ export function useAuth(): AuthState & AuthActions {
 
   const logout = async () => {
     await signOut(auth);
+    clearSessionCookie();
     setUser(null);
     setProfile(null);
   };

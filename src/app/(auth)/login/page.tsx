@@ -92,6 +92,14 @@ export default function LoginPage() {
             </button>
           </div>
 
+          {mode === "login" && (
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-xs text-brand-primary hover:underline font-medium">
+                Forgot Password?
+              </Link>
+            </div>
+          )}
+
           <Button type="submit" className="w-full mt-2" isLoading={loading} size="lg">
             {mode === "login" ? "Login" : "Create Account"}
           </Button>
