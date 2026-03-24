@@ -31,7 +31,6 @@ import {
   orderBy,
   limit,
   getDocs,
-  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { cn, formatNPR } from "@/lib/utils";
@@ -238,56 +237,41 @@ export default function HomePage() {
     try {
       setLoading(true);
       const photosRef = collection(db, "photos");
-      const baseConstraints = [
+
+      // Single efficient query — fetch all approved public photos
+      const allQuery = query(
+        photosRef,
         where("status", "==", "approved"),
         where("isPublic", "==", true),
-      ];
-
-      // Total photos count
-      const countSnap = await getCountFromServer(
-        query(photosRef, ...baseConstraints)
+        orderBy("createdAt", "desc"),
+        limit(500)
       );
-      setTotalPhotos(countSnap.data().count);
+      const allSnap = await getDocs(allQuery);
 
-      // Featured photos (top by salesCount)
-      const featuredQuery = query(
-        photosRef,
-        ...baseConstraints,
-        orderBy("salesCount", "desc"),
-        limit(8)
-      );
-      const featuredSnap = await getDocs(featuredQuery);
-      const photos: StockPhoto[] = [];
+      const allPhotos: StockPhoto[] = [];
       const ownerIds = new Set<string>();
-
-      featuredSnap.forEach((doc) => {
-        const data = doc.data() as Omit<StockPhoto, "id">;
-        photos.push({ ...data, id: doc.id } as StockPhoto);
-        ownerIds.add(data.ownerId);
-      });
-      setFeaturedPhotos(photos);
-
-      // Total unique photographers — count from a broader query
-      const allPhotosSnap = await getDocs(
-        query(photosRef, ...baseConstraints, limit(500))
-      );
-      const allOwnerIds = new Set<string>();
-      allPhotosSnap.forEach((doc) => {
-        allOwnerIds.add(doc.data().ownerId);
-      });
-      setTotalPhotographers(allOwnerIds.size);
-
-      // Category counts
       const counts: Record<string, number> = {};
-      await Promise.all(
-        CATEGORIES.map(async (cat) => {
-          const catSnap = await getCountFromServer(
-            query(photosRef, ...baseConstraints, where("category", "==", cat.value))
-          );
-          counts[cat.value] = catSnap.data().count;
-        })
-      );
+
+      allSnap.forEach((doc) => {
+        const data = doc.data() as Omit<StockPhoto, "id">;
+        const photo = { ...data, id: doc.id } as StockPhoto;
+        allPhotos.push(photo);
+        ownerIds.add(data.ownerId);
+
+        // Count categories
+        const cat = (data.category || "").toLowerCase();
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+
+      setTotalPhotos(allPhotos.length);
+      setTotalPhotographers(ownerIds.size);
       setCategoryCounts(counts);
+
+      // Featured = top 8 by salesCount (fallback to newest)
+      const sorted = [...allPhotos].sort(
+        (a, b) => (b.salesCount || 0) - (a.salesCount || 0)
+      );
+      setFeaturedPhotos(sorted.slice(0, 8));
     } catch (err) {
       console.error("Error fetching home data:", err);
     } finally {
