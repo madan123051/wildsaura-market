@@ -26,7 +26,6 @@ import {
   limit,
   startAfter,
   getDocs,
-  getCountFromServer,
   QueryDocumentSnapshot,
   DocumentData,
   QueryConstraint,
@@ -342,19 +341,25 @@ function ExploreContent() {
     [router, urlQuery, selectedCategory, sortBy]
   );
 
-  /* ── Firestore order config ── */
-  const getFirestoreOrder = useCallback((sort: SortOption) => {
+  /* ── Client-side sort helper ── */
+  const sortPhotos = useCallback((photosArr: StockPhoto[], sort: SortOption): StockPhoto[] => {
+    const sorted = [...photosArr];
     switch (sort) {
       case "popular":
-        return orderBy("salesCount", "desc");
+        sorted.sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0));
+        break;
       case "price_asc":
-        return orderBy("priceNPR", "asc");
+        sorted.sort((a, b) => (a.priceNPR || 0) - (b.priceNPR || 0));
+        break;
       case "price_desc":
-        return orderBy("priceNPR", "desc");
+        sorted.sort((a, b) => (b.priceNPR || 0) - (a.priceNPR || 0));
+        break;
       case "newest":
       default:
-        return orderBy("createdAt", "desc");
+        // Already sorted by createdAt desc from Firestore
+        break;
     }
+    return sorted;
   }, []);
 
   /* ── Fetch photos ── */
@@ -368,33 +373,18 @@ function ExploreContent() {
         }
 
         const photosRef = collection(db, "photos");
+        
+        // Only use filters that have Firestore indexes: status + isPublic + createdAt
+        // Category, search, price, sort are all done CLIENT-SIDE to avoid composite index issues
         const constraints: QueryConstraint[] = [
           where("status", "==", "approved"),
           where("isPublic", "==", true),
+          orderBy("createdAt", "desc"),
         ];
 
-        if (selectedCategory) {
-          constraints.push(where("category", "==", selectedCategory));
-        }
-
-        constraints.push(getFirestoreOrder(sortBy));
-
-        // Count query (without search filter since that's client-side)
-        const countQuery = query(
-          photosRef,
-          where("status", "==", "approved"),
-          where("isPublic", "==", true),
-          ...(selectedCategory ? [where("category", "==", selectedCategory)] : [])
-        );
-        const countSnap = await getCountFromServer(countQuery);
-        setTotalCount(countSnap.data().count);
-
-        // Data query
-        const fetchLimit = activeSearch ? 200 : PAGE_SIZE;
+        // Fetch all matching photos (large batch for client-side filtering)
+        const fetchLimit = 500;
         const dataConstraints = [...constraints, limit(fetchLimit)];
-        if (isLoadMore && lastDoc) {
-          dataConstraints.push(startAfter(lastDoc));
-        }
 
         const snap = await getDocs(query(photosRef, ...dataConstraints));
         const fetched: StockPhoto[] = [];
@@ -403,11 +393,16 @@ function ExploreContent() {
           fetched.push({ ...data, id: doc.id } as StockPhoto);
         });
 
-        // Client-side text search
+        // Client-side category filter
         let filtered = fetched;
+        if (selectedCategory) {
+          filtered = filtered.filter((p) => p.category === selectedCategory);
+        }
+
+        // Client-side text search
         if (activeSearch) {
           const searchLower = activeSearch.toLowerCase();
-          filtered = fetched.filter(
+          filtered = filtered.filter(
             (p) =>
               p.title.toLowerCase().includes(searchLower) ||
               (p.description && p.description.toLowerCase().includes(searchLower)) ||
@@ -425,15 +420,13 @@ function ExploreContent() {
           if (!isNaN(max)) filtered = filtered.filter((p) => p.priceNPR <= max);
         }
 
-        if (isLoadMore) {
-          setPhotos((prev) => [...prev, ...filtered]);
-        } else {
-          setPhotos(filtered);
-        }
+        // Client-side sort
+        filtered = sortPhotos(filtered, sortBy);
 
-        const lastVisible = snap.docs[snap.docs.length - 1] || null;
-        setLastDoc(lastVisible);
-        setHasMore(snap.docs.length === fetchLimit && !activeSearch);
+        // Set count from filtered results
+        setTotalCount(filtered.length);
+        setPhotos(filtered);
+        setHasMore(false); // All results fetched at once
       } catch (err) {
         console.error("Error fetching photos:", err);
         toast.error("Failed to load photos. Please try again.");
@@ -442,7 +435,7 @@ function ExploreContent() {
         setLoadingMore(false);
       }
     },
-    [selectedCategory, sortBy, activeSearch, minPrice, maxPrice, getFirestoreOrder, lastDoc]
+    [selectedCategory, sortBy, activeSearch, minPrice, maxPrice, sortPhotos]
   );
 
   /* ── Fetch on filter change ── */
