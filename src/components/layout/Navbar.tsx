@@ -16,15 +16,15 @@ import {
   Download,
   LayoutDashboard,
   ShieldCheck,
-  ExternalLink,
   Camera,
+  ImageIcon,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { clearSessionCookie } from "@/lib/session";
 import type { UserProfile, CartItem } from "@/types";
-import { DRISHYA_APP_URL, CATEGORIES } from "@/types";
+import { CATEGORIES } from "@/types";
 
 function Navbar() {
   const router = useRouter();
@@ -179,15 +179,13 @@ function Navbar() {
               )}
             </div>
 
-            <a
-              href={DRISHYA_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/upload"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
             >
+              <Camera className="w-3.5 h-3.5" />
               Sell
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            </Link>
           </nav>
 
           {/* Right Side */}
@@ -260,6 +258,14 @@ function Navbar() {
                     >
                       <LayoutDashboard className="w-4 h-4" />
                       Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard?tab=listings"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                      My Listings
                     </Link>
                     <Link
                       href="/profile"
@@ -381,16 +387,14 @@ function Navbar() {
               </div>
             </div>
 
-            <a
-              href={DRISHYA_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/upload"
+              onClick={() => setShowMobileMenu(false)}
               className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
             >
               <Camera className="w-4 h-4" />
               Sell Your Photos
-              <ExternalLink className="w-3 h-3 ml-auto" />
-            </a>
+            </Link>
 
             <div className="border-t border-surface-border pt-3 mt-3">
               {user ? (
@@ -425,6 +429,14 @@ function Navbar() {
                   >
                     <LayoutDashboard className="w-4 h-4" />
                     Dashboard
+                  </Link>
+                  <Link
+                    href="/dashboard?tab=listings"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <ImageIcon className="w-4 h-4" />
+                    My Listings
                   </Link>
                   <Link
                     href="/profile"
