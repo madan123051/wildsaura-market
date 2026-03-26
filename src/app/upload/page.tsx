@@ -27,6 +27,8 @@ import type { PhotoCategory } from "@/types";
 import toast from "react-hot-toast";
 
 interface AiResult {
+  is_marketable: boolean;
+  rejection_reason: string;
   title: string;
   description: string;
   tags: string[];
@@ -57,6 +59,10 @@ export default function UploadPage() {
   const [priceNPR, setPriceNPR] = useState(100);
   const [qualityScore, setQualityScore] = useState(7);
   const [marketDemand, setMarketDemand] = useState("Medium");
+
+  // AI marketability pre-check
+  const [isMarketable, setIsMarketable] = useState<boolean | null>(null); // null = not checked yet
+  const [rejectionReason, setRejectionReason] = useState("");
 
   const [aiError, setAiError] = useState("");
 
@@ -115,6 +121,10 @@ export default function UploadPage() {
           setCategory((aiData.category as PhotoCategory) || "nature");
           setQualityScore(aiData.quality_score || 7);
           setMarketDemand(aiData.market_demand || "Medium");
+
+          // Marketability pre-check
+          setIsMarketable(aiData.is_marketable ?? true);
+          setRejectionReason(aiData.rejection_reason || "");
 
           // Suggest price based on quality & demand
           const basePrice = aiData.quality_score >= 8 ? 200 : aiData.quality_score >= 6 ? 150 : 100;
@@ -176,7 +186,7 @@ export default function UploadPage() {
         tags,
         category,
         priceNPR,
-        status: "pending",
+        status: isMarketable === false ? "appeal" : "pending",
         isPublic: false,
         salesCount: 0,
         viewCount: 0,
@@ -184,12 +194,18 @@ export default function UploadPage() {
         qualityScore,
         aiQualityScore: qualityScore,
         marketDemand,
+        aiRejected: isMarketable === false,
+        aiRejectionReason: rejectionReason,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
       setStep("done");
-      toast.success("Photo submitted for review! 🎉");
+      toast.success(
+        isMarketable === false
+          ? "Appeal submitted for admin review 📩"
+          : "Photo submitted for review! 🎉"
+      );
     } catch (err) {
       console.error("Submit error:", err);
       toast.error("Failed to submit. Please try again.");
@@ -210,6 +226,8 @@ export default function UploadPage() {
     setQualityScore(7);
     setMarketDemand("Medium");
     setAiError("");
+    setIsMarketable(null);
+    setRejectionReason("");
     setStep("select");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -332,6 +350,27 @@ export default function UploadPage() {
               <div className="flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm">
                 <Sparkles className="w-4 h-4 flex-shrink-0" />
                 AI has auto-filled the details below. You can edit them before submitting.
+              </div>
+            )}
+
+            {/* AI Marketability Result */}
+            {isMarketable === true && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl text-green-800 text-sm">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                AI approved! Your photo meets marketplace quality standards.
+              </div>
+            )}
+
+            {isMarketable === false && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
+                <div className="flex items-center gap-2 text-red-800 text-sm font-semibold mb-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  AI Review: This image may not meet marketplace standards
+                </div>
+                <p className="text-sm text-red-700 mb-3">{rejectionReason}</p>
+                <p className="text-xs text-red-600/80">
+                  You can still submit this photo for admin review. The admin will make the final decision.
+                </p>
               </div>
             )}
 
@@ -473,7 +512,7 @@ export default function UploadPage() {
                 className="flex-1 inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-8 py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-200"
               >
                 <Upload className="w-5 h-5" />
-                Submit for Review
+                {isMarketable === false ? "Request Admin Review" : "Submit for Review"}
               </button>
               <button
                 type="button"
@@ -505,12 +544,26 @@ export default function UploadPage() {
             <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="w-8 h-8 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">
-              Photo Submitted! 🎉
-            </h3>
-            <p className="text-gray-500 mb-8">
-              Your photo has been submitted for admin review. Once approved, it will appear in the marketplace.
-            </p>
+            {isMarketable === false ? (
+              <>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Appeal Submitted! 📩
+                </h3>
+                <p className="text-gray-500 mb-8">
+                  Our AI flagged this photo, but your appeal has been sent to the admin for manual review.
+                  The admin will make the final decision.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">
+                  Photo Submitted! 🎉
+                </h3>
+                <p className="text-gray-500 mb-8">
+                  Your photo has been submitted for admin review. Once approved, it will appear in the marketplace.
+                </p>
+              </>
+            )}
             <div className="flex gap-3 justify-center">
               <button
                 onClick={handleStartOver}

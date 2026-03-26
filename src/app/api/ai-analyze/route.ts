@@ -112,9 +112,31 @@ export async function POST(req: Request) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
-      Analyze this image for a professional stock photography marketplace.
-      Provide the following in a strict JSON format (no markdown, no code blocks):
+      You are a professional stock photography marketplace quality reviewer.
+      Analyze this image and provide TWO things:
+
+      1. MARKETABILITY CHECK: Determine if this image is suitable for sale on a professional stock photography marketplace.
+         An image is NOT marketable if it is:
+         - Blurry, out of focus, or very low resolution
+         - A screenshot, meme, or text-heavy image
+         - Inappropriate, offensive, or contains harmful content
+         - A random selfie with no artistic value
+         - Extremely dark/overexposed with no detail visible
+         - A duplicate/low-effort phone snap (e.g. random food on table with bad lighting)
+         - Contains watermarks or copyrighted content from others
+
+         An image IS marketable if it has:
+         - Clear subject matter and decent composition
+         - Reasonable technical quality (focus, exposure, sharpness)
+         - Potential commercial or editorial use
+         - Artistic or documentary value
+
+      2. METADATA: If the image is marketable, generate metadata for the listing.
+
+      Return STRICT JSON (no markdown, no code blocks):
       {
+        "is_marketable": true,
+        "rejection_reason": "",
         "title": "A descriptive 5-10 word title",
         "description": "A brief 2-sentence explanation of the photo",
         "tags": ["array", "of", "20", "relevant", "SEO", "keywords"],
@@ -122,8 +144,22 @@ export async function POST(req: Request) {
         "quality_score": 8,
         "market_demand": "High"
       }
-      
-      IMPORTANT: 
+
+      If the image is NOT marketable, return:
+      {
+        "is_marketable": false,
+        "rejection_reason": "Clear reason why this image is not suitable for the marketplace (1-2 sentences in English)",
+        "title": "",
+        "description": "",
+        "tags": [],
+        "category": "nature",
+        "quality_score": 2,
+        "market_demand": "Low"
+      }
+
+      IMPORTANT:
+      - is_marketable MUST be a boolean (true or false)
+      - rejection_reason should be empty string if marketable, or a clear explanation if not
       - category MUST be exactly one of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure
       - quality_score must be 1-10
       - market_demand must be "High", "Medium", or "Low"
@@ -165,6 +201,14 @@ export async function POST(req: Request) {
       .replace(/```\s*/g, "")
       .trim();
     const parsed = JSON.parse(cleanText);
+
+    // Ensure is_marketable is a boolean
+    parsed.is_marketable = parsed.is_marketable === true;
+
+    // Ensure rejection_reason is a string
+    if (typeof parsed.rejection_reason !== "string") {
+      parsed.rejection_reason = parsed.is_marketable ? "" : "Image quality does not meet marketplace standards.";
+    }
 
     // Normalize category to match PhotoCategory type
     parsed.category = normalizeCategory(parsed.category || "nature");

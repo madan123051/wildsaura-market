@@ -51,6 +51,7 @@ import {
   ToggleRight,
   Save,
   Info,
+  AlertCircle,
 } from "lucide-react";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -78,6 +79,7 @@ function statusBadge(status: string) {
     pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
     approved: "bg-green-100 text-green-800 border-green-200",
     rejected: "bg-red-100 text-red-800 border-red-200",
+    appeal: "bg-orange-100 text-orange-800 border-orange-200",
   };
   return map[status] ?? "bg-gray-100 text-gray-800 border-gray-200";
 }
@@ -94,7 +96,7 @@ function roleBadge(role: string) {
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type TabKey = "photos" | "users" | "listings" | "stats";
-type PhotoFilter = "all" | "pending" | "approved" | "rejected";
+type PhotoFilter = "all" | "pending" | "approved" | "rejected" | "appeal";
 
 interface PurchaseRecord {
   id: string;
@@ -114,6 +116,7 @@ interface StatData {
   pendingCount: number;
   approvedCount: number;
   rejectedCount: number;
+  appealCount: number;
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -291,6 +294,9 @@ export default function AdminDashboard() {
       const rejectedSnap = await getCountFromServer(
         query(collection(db, "photos"), where("status", "==", "rejected"))
       );
+      const appealSnap = await getCountFromServer(
+        query(collection(db, "photos"), where("status", "==", "appeal"))
+      );
 
       // Revenue from purchases
       const purchasesDocs = await getDocs(collection(db, "purchases"));
@@ -321,6 +327,7 @@ export default function AdminDashboard() {
         pendingCount: pendingSnap.data().count,
         approvedCount: approvedSnap.data().count,
         rejectedCount: rejectedSnap.data().count,
+        appealCount: appealSnap.data().count,
       });
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -572,7 +579,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center gap-2">
                   <Filter className="w-4 h-4 text-gray-400" />
                   <span className="text-sm font-medium text-gray-700">Filter:</span>
-                  {(["pending", "approved", "rejected", "all"] as PhotoFilter[]).map((f) => (
+                  {(["pending", "appeal", "approved", "rejected", "all"] as PhotoFilter[]).map((f) => (
                     <button
                       key={f}
                       onClick={() => setPhotoFilter(f)}
@@ -1440,6 +1447,7 @@ export default function AdminDashboard() {
                             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                           >
                             <option value="pending">Pending</option>
+                            <option value="appeal">Appeal (AI Rejected)</option>
                             <option value="approved">Approved</option>
                             <option value="rejected">Rejected</option>
                           </select>
@@ -1553,11 +1561,16 @@ export default function AdminDashboard() {
                 {/* Photo Status Breakdown */}
                 <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
                   <h3 className="text-base font-bold text-gray-900 mb-4">Photo Status Breakdown</h3>
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-4 gap-4">
                     <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200 text-center">
                       <Clock className="w-6 h-6 text-yellow-600 mx-auto mb-2" />
                       <p className="text-2xl font-bold text-yellow-800">{stats.pendingCount}</p>
                       <p className="text-xs text-yellow-600 font-medium">Pending</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-xl p-4 border border-orange-200 text-center">
+                      <AlertCircle className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-orange-800">{stats.appealCount}</p>
+                      <p className="text-xs text-orange-600 font-medium">Appeals</p>
                     </div>
                     <div className="bg-green-50 rounded-xl p-4 border border-green-200 text-center">
                       <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
