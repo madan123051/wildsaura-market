@@ -259,22 +259,19 @@ export default function AdminDashboard() {
   const fetchPhotos = useCallback(async () => {
     setPhotosLoading(true);
     try {
-      let q;
-      if (photoFilter === "all") {
-        q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
-      } else {
-        q = query(
-          collection(db, "photos"),
-          where("status", "==", photoFilter),
-          orderBy("createdAt", "desc")
-        );
-      }
+      // Fetch all photos with a simple orderBy (no composite index needed)
+      const q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
       const snap = await getDocs(q);
-      const results: StockPhoto[] = snap.docs.map((d) => ({
+      const allPhotos: StockPhoto[] = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       })) as StockPhoto[];
-      setPhotos(results);
+      // Apply status filter client-side to avoid Firestore composite index requirement
+      if (photoFilter === "all") {
+        setPhotos(allPhotos);
+      } else {
+        setPhotos(allPhotos.filter((p) => p.status === photoFilter));
+      }
       setSelectedPhotoIds(new Set());
     } catch (err) {
       console.error("Error fetching photos:", err);
