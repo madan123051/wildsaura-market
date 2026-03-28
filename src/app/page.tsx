@@ -243,10 +243,9 @@ export default function HomePage() {
       setLoading(true);
       const photosRef = collection(db, "photos");
 
+      // Fetch all photos with simple orderBy (no composite index needed)
       const allQuery = query(
         photosRef,
-        where("status", "==", "approved"),
-        where("isPublic", "==", true),
         orderBy("createdAt", "desc"),
         limit(500)
       );
@@ -259,6 +258,8 @@ export default function HomePage() {
       allSnap.forEach((d) => {
         const { imageUrl: _hiRes, ...safeData } = d.data();
         const photo = { ...safeData, id: d.id } as StockPhoto;
+        // Filter client-side: only approved & public photos
+        if (photo.status !== "approved" || photo.isPublic === false) return;
         allPhotos.push(photo);
         ownerIds.add(photo.ownerId);
 
