@@ -477,20 +477,20 @@ export default function PhotoDetailPage() {
                   {photo.ownerAvatar ? (
                     <Image
                       src={photo.ownerAvatar}
-                      alt={photo.ownerName || "Photographer"}
+                      alt={photo.photographerName || photo.ownerName || "Photographer"}
                       fill
                       className="object-cover"
                       unoptimized
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center bg-brand-primary/10 text-sm font-bold text-brand-primary">
-                      {(photo.ownerName || "U").charAt(0).toUpperCase()}
+                      {(photo.photographerName || photo.ownerName || "U").charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-brand-dark">
-                    {photo.ownerName || "Unknown Photographer"}
+                    {photo.photographerName || photo.ownerName || "Unknown Photographer"}
                   </p>
                   <p className="text-xs text-gray-500">View Portfolio →</p>
                 </div>
@@ -621,7 +621,7 @@ export default function PhotoDetailPage() {
               {photo.ownerAvatar ? (
                 <Image
                   src={photo.ownerAvatar}
-                  alt={photo.ownerName || "Photographer"}
+                  alt={photo.photographerName || photo.ownerName || "Photographer"}
                   fill
                   className="object-cover"
                   unoptimized
@@ -634,7 +634,7 @@ export default function PhotoDetailPage() {
             </div>
             <div className="flex-1">
               <p className="text-lg font-semibold text-brand-dark">
-                {photo.ownerName || "Unknown Photographer"}
+                {photo.photographerName || photo.ownerName || "Unknown Photographer"}
               </p>
               <p className="text-sm text-gray-500">Wildlife & Nature Photographer</p>
             </div>

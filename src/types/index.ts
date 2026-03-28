@@ -41,6 +41,7 @@ export interface StockPhoto {
   ownerId: string;
   ownerName?: string;
   ownerAvatar?: string;
+  photographerName?: string;
   imageUrl: string;
   thumbnailUrl: string;
   title: string;

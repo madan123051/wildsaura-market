@@ -78,7 +78,7 @@ export async function GET(
     }
 
     /* ═══ 4. Fetch Photographer Info ═══ */
-    let photographerName = photo.ownerName || "WildSaura Photographer";
+    let photographerName = photo.photographerName || photo.ownerName || "WildSaura Photographer";
     let photographerEmail = "";
     let cameraInfo = "Not specified";
     let cameraSettings = "Not specified";
