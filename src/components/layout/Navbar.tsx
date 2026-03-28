@@ -186,7 +186,7 @@ function Navbar() {
             {/* Admin-only: Sell button */}
             {isAdmin && (
               <Link
-                href="/upload"
+                href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
               >
                 <Camera className="w-3.5 h-3.5" />
@@ -411,7 +411,7 @@ function Navbar() {
             {/* Admin-only: Sell button in mobile */}
             {isAdmin && (
               <Link
-                href="/upload"
+                href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
                 onClick={() => setShowMobileMenu(false)}
                 className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
               >
