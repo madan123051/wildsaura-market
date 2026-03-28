@@ -6,6 +6,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut,
   User,
@@ -47,22 +49,7 @@ export function useAuth(): AuthState & AuthActions {
     }
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        setSessionCookie(firebaseUser.uid);
-        await fetchProfile(firebaseUser.uid);
-      } else {
-        clearSessionCookie();
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [fetchProfile]);
-
-  const createUserProfile = async (
+  const createUserProfile = useCallback(async (
     uid: string,
     displayName: string,
     email: string,
@@ -83,8 +70,45 @@ export function useAuth(): AuthState & AuthActions {
       };
       await setDoc(ref, newProfile);
       setProfile(newProfile as UserProfile);
+    } else {
+      setProfile(snap.data() as UserProfile);
     }
-  };
+  }, []);
+
+  // Handle redirect result on page load (for signInWithRedirect fallback)
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) {
+          const u = result.user;
+          await createUserProfile(
+            u.uid,
+            u.displayName ?? "User",
+            u.email ?? "",
+            u.photoURL ?? ""
+          );
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect sign-in error:", err);
+        setError(err.message);
+      });
+  }, [createUserProfile]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        setSessionCookie(firebaseUser.uid);
+        await fetchProfile(firebaseUser.uid);
+      } else {
+        clearSessionCookie();
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [fetchProfile]);
 
   const loginWithEmail = async (email: string, password: string) => {
     setError(null);
@@ -111,11 +135,32 @@ export function useAuth(): AuthState & AuthActions {
   const loginWithGoogle = async () => {
     setError(null);
     try {
+      // Try popup first (works on desktop)
       const result = await signInWithPopup(auth, googleProvider);
       const u = result.user;
       await createUserProfile(u.uid, u.displayName ?? "User", u.email ?? "", u.photoURL ?? "");
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const firebaseError = err as { code?: string; message?: string };
+      console.warn("Popup sign-in failed, trying redirect...", firebaseError.code);
+      
+      // If popup blocked or failed, fallback to redirect
+      if (
+        firebaseError.code === "auth/popup-blocked" ||
+        firebaseError.code === "auth/popup-closed-by-user" ||
+        firebaseError.code === "auth/cancelled-popup-request" ||
+        firebaseError.code === "auth/internal-error" ||
+        firebaseError.code === "auth/network-request-failed"
+      ) {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return; // Page will redirect, then getRedirectResult handles it
+        } catch (redirectErr: unknown) {
+          setError((redirectErr as Error).message);
+          throw redirectErr;
+        }
+      }
+      
+      setError(firebaseError.message ?? "Google sign-in failed");
       throw err;
     }
   };
