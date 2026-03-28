@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  setDoc,
   query,
   where,
   orderBy,
@@ -291,17 +292,14 @@ export default function AdminDashboard() {
   const fetchPhotos = useCallback(async () => {
     setPhotosLoading(true);
     try {
-      let q;
-      if (photoFilter === "all") {
-        q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
-      } else {
-        q = query(
-          collection(db, "photos"),
-          where("status", "==", photoFilter),
-          orderBy("createdAt", "desc")
-        );
-      }
-      const snap = await getDocs(q);
+      // Fetch all photos and filter client-side to avoid composite index requirement
+      const allQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
+      const allSnap = await getDocs(allQuery);
+      const snap = {
+        docs: photoFilter === "all"
+          ? allSnap.docs
+          : allSnap.docs.filter((d) => d.data().status === photoFilter),
+      };
       const results: StockPhoto[] = snap.docs.map((d) => ({
         id: d.id,
         ...d.data(),
@@ -532,18 +530,51 @@ export default function AdminDashboard() {
     if (!firebaseUser) return;
     setAiSettingsLoading(true);
     try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/ai-settings", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiSettings(data);
+      const docRef = doc(db, "settings", "ai-config");
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        setAiSettings(snap.data() as AISettings);
       } else {
-        toast.error("Failed to load AI settings");
+        // Set defaults
+        setAiSettings({
+          photoAnalysis: {
+            label: "Photo Analysis AI",
+            description: "Analyzes uploaded photos — generates title, tags, category, quality score & price suggestion",
+            provider: "gemini",
+            apiKey: "",
+            model: "gemini-1.5-flash",
+            enabled: true,
+          },
+          chatbot: {
+            label: "Market Chatbot AI",
+            description: "Customer support chatbot — answers market queries, photo search help, pricing info",
+            provider: "gemini",
+            apiKey: "",
+            model: "gemini-1.5-flash",
+            enabled: false,
+            systemPrompt: "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise. Answer in the user\'s language.",
+          },
+          contentModeration: {
+            label: "Content Moderation AI",
+            description: "Auto-screens uploads for inappropriate, copyrighted, or low-quality content",
+            provider: "gemini",
+            apiKey: "",
+            model: "gemini-1.5-flash",
+            enabled: false,
+          },
+          seoOptimization: {
+            label: "SEO & Description AI",
+            description: "Generates SEO-optimized titles, meta descriptions & alt text for better discoverability",
+            provider: "gemini",
+            apiKey: "",
+            model: "gemini-1.5-flash",
+            enabled: false,
+          },
+        });
       }
-    } catch {
-      toast.error("Failed to load AI settings");
+    } catch (err) {
+      console.error("AI Settings load error:", err);
+      toast.error("Could not load AI settings");
     } finally {
       setAiSettingsLoading(false);
     }
@@ -553,21 +584,15 @@ export default function AdminDashboard() {
     if (!firebaseUser || !aiSettings) return;
     setAiSettingsSaving(true);
     try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/ai-settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(aiSettings),
-      });
-      if (res.ok) {
-        toast.success("AI settings saved successfully!");
-      } else {
-        toast.error("Failed to save AI settings");
-      }
-    } catch {
+      const docRef = doc(db, "settings", "ai-config");
+      await setDoc(docRef, {
+        ...aiSettings,
+        updatedAt: new Date().toISOString(),
+        updatedBy: firebaseUser.email,
+      }, { merge: true });
+      toast.success("AI settings saved successfully!");
+    } catch (err) {
+      console.error("AI Settings save error:", err);
       toast.error("Failed to save AI settings");
     } finally {
       setAiSettingsSaving(false);
