@@ -1,17 +1,32 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as fs from "fs";
-
-// Use the same API Key you have in AI Studio for the Wildsaura project
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "YOUR_API_KEY_HERE");
+import { adminDb } from "@/lib/firebaseAdmin";
 
 // ==============================
-// 1. CHOOSE THE RIGHT MODELS
+// 1. GET CONFIG FROM ADMIN DASHBOARD (Firestore)
 // ==============================
-// Use 2.5 Pro for deep image understanding. Essential for Stock Photo quality.
-const imageAnalyzer = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-
-// Use 2.0 Flash for speedy response generation.
-const textGenerator = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+async function getAIConfig(): Promise<{ apiKey: string; analysisModel: string; textModel: string }> {
+  try {
+    const snap = await adminDb.collection("settings").doc("ai-config").get();
+    if (snap.exists) {
+      const data = snap.data();
+      if (data?.photoAnalysis?.apiKey && data.photoAnalysis.enabled) {
+        return {
+          apiKey: data.photoAnalysis.apiKey,
+          analysisModel: "gemini-2.5-pro",  // Pro for deep image analysis
+          textModel: data.photoAnalysis.model || "gemini-2.0-flash",  // Flash for metadata
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load AI settings from Firestore, using env fallback:", e);
+  }
+  return {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    analysisModel: "gemini-2.5-pro",
+    textModel: "gemini-2.0-flash",
+  };
+}
 
 
 // ==============================
@@ -32,6 +47,16 @@ function fileToGenerativePart(path: string, mimeType: string) {
 // ==============================
 export async function analyzeStockPhoto(imagePath: string) {
   try {
+    // Get API key & models from Admin Dashboard (Firestore)
+    const config = await getAIConfig();
+    if (!config.apiKey) {
+      throw new Error("AI API key not configured. Please set it in Admin → AI Settings.");
+    }
+
+    const genAI = new GoogleGenerativeAI(config.apiKey);
+    const imageAnalyzer = genAI.getGenerativeModel({ model: config.analysisModel });
+    const textGenerator = genAI.getGenerativeModel({ model: config.textModel });
+
     const imagePart = fileToGenerativePart(imagePath, "image/jpeg");
 
     // --- STEP 1: DEEP ANALYSIS (using 2.5 Pro) ---
