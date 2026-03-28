@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+import { adminDb } from "@/lib/firebaseAdmin";
 
 // Valid PhotoCategory values that match the frontend types
 const VALID_CATEGORIES = [
@@ -18,77 +17,58 @@ const VALID_CATEGORIES = [
 
 // Map common AI-generated categories to our valid PhotoCategory values
 const CATEGORY_ALIASES: Record<string, string> = {
-  animal: "wildlife",
-  animals: "wildlife",
-  bird: "wildlife",
-  birds: "wildlife",
-  insect: "macro",
-  insects: "macro",
-  flower: "macro",
-  flowers: "macro",
-  plant: "nature",
-  plants: "nature",
-  tree: "nature",
-  trees: "nature",
-  forest: "nature",
-  mountain: "landscape",
-  mountains: "landscape",
-  ocean: "landscape",
-  sea: "landscape",
-  beach: "landscape",
-  sunset: "landscape",
-  sunrise: "landscape",
-  city: "street",
-  urban: "street",
-  architecture: "street",
-  building: "street",
-  buildings: "street",
-  people: "culture",
-  person: "culture",
-  portrait: "culture",
-  festival: "culture",
-  tradition: "culture",
-  food: "culture",
-  abstract: "macro",
-  closeup: "macro",
-  "close-up": "macro",
-  drone: "aerial",
-  sky: "aerial",
-  flying: "aerial",
-  water: "underwater",
-  diving: "underwater",
-  marine: "underwater",
-  fish: "underwater",
-  coral: "underwater",
-  sport: "adventure",
-  sports: "adventure",
-  hiking: "adventure",
-  climbing: "adventure",
-  extreme: "adventure",
-  travel: "adventure",
-  other: "nature",
+  animal: "wildlife", animals: "wildlife", bird: "wildlife", birds: "wildlife",
+  insect: "macro", insects: "macro", flower: "macro", flowers: "macro",
+  plant: "nature", plants: "nature", tree: "nature", trees: "nature", forest: "nature",
+  mountain: "landscape", mountains: "landscape", ocean: "landscape", sea: "landscape",
+  beach: "landscape", sunset: "landscape", sunrise: "landscape",
+  city: "street", urban: "street", architecture: "street", building: "street", buildings: "street",
+  people: "culture", person: "culture", portrait: "culture", festival: "culture",
+  tradition: "culture", food: "culture",
+  abstract: "macro", closeup: "macro", "close-up": "macro",
+  drone: "aerial", sky: "aerial", flying: "aerial",
+  water: "underwater", diving: "underwater", marine: "underwater", fish: "underwater", coral: "underwater",
+  sport: "adventure", sports: "adventure", hiking: "adventure", climbing: "adventure",
+  extreme: "adventure", travel: "adventure", other: "nature",
 };
 
 function normalizeCategory(raw: string): string {
   const lower = raw.toLowerCase().trim();
-  // Direct match
   if ((VALID_CATEGORIES as readonly string[]).includes(lower)) return lower;
-  // Alias match
   if (CATEGORY_ALIASES[lower]) return CATEGORY_ALIASES[lower];
-  // Default fallback
   return "nature";
+}
+
+// Helper: Get AI API key from Firestore settings (fallback to env)
+async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string }> {
+  try {
+    const snap = await adminDb.collection("settings").doc("ai-config").get();
+    if (snap.exists) {
+      const data = snap.data();
+      if (data?.photoAnalysis?.apiKey && data.photoAnalysis.enabled) {
+        return {
+          apiKey: data.photoAnalysis.apiKey,
+          model: data.photoAnalysis.model || "gemini-1.5-flash",
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load AI settings from Firestore, using env fallback:", e);
+  }
+  return {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    model: "gemini-1.5-flash",
+  };
 }
 
 export async function POST(req: Request) {
   try {
-    // CORS headers
     const headers = {
       "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
     };
 
-    // Handle preflight
     if (req.method === "OPTIONS") {
       return new NextResponse(null, { status: 204, headers });
     }
@@ -102,14 +82,17 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!process.env.GEMINI_API_KEY) {
+    // Get API key from Firestore (admin-managed) or fallback to env
+    const config = await getPhotoAnalysisConfig();
+    if (!config.apiKey) {
       return NextResponse.json(
-        { error: "GEMINI_API_KEY not configured" },
+        { error: "AI API key not configured. Please set it in Admin → AI Settings." },
         { status: 500, headers }
       );
     }
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const genAI = new GoogleGenerativeAI(config.apiKey);
+    const model = genAI.getGenerativeModel({ model: config.model });
 
     const prompt = `
       You are a professional stock photography marketplace quality reviewer.
@@ -171,60 +154,33 @@ export async function POST(req: Request) {
       return res.arrayBuffer();
     });
 
-    // Detect mime type from URL
     const extension = imageUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
     const mimeMap: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+      gif: "image/gif", webp: "image/webp",
     };
     const mimeType = mimeMap[extension || ""] || "image/jpeg";
 
     const result = await model.generateContent([
       prompt,
-      {
-        inlineData: {
-          data: Buffer.from(imageResp).toString("base64"),
-          mimeType,
-        },
-      },
+      { inlineData: { data: Buffer.from(imageResp).toString("base64"), mimeType } },
     ]);
 
     const response = await result.response;
     const text = response.text();
 
-    // Clean and parse JSON
-    const cleanText = text
-      .replace(/```json\s*/gi, "")
-      .replace(/```\s*/g, "")
-      .trim();
+    const cleanText = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(cleanText);
 
-    // Ensure is_marketable is a boolean
     parsed.is_marketable = parsed.is_marketable === true;
-
-    // Ensure rejection_reason is a string
     if (typeof parsed.rejection_reason !== "string") {
       parsed.rejection_reason = parsed.is_marketable ? "" : "Image quality does not meet marketplace standards.";
     }
-
-    // Normalize category to match PhotoCategory type
     parsed.category = normalizeCategory(parsed.category || "nature");
-
-    // Validate quality_score
-    parsed.quality_score = Math.min(
-      10,
-      Math.max(1, parseInt(parsed.quality_score) || 7)
-    );
-
-    // Validate market_demand
+    parsed.quality_score = Math.min(10, Math.max(1, parseInt(parsed.quality_score) || 7));
     if (!["High", "Medium", "Low"].includes(parsed.market_demand)) {
       parsed.market_demand = "Medium";
     }
-
-    // Sanitize tags
     if (Array.isArray(parsed.tags)) {
       parsed.tags = parsed.tags
         .map((t: unknown) => String(t).toLowerCase().trim())
@@ -238,16 +194,12 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("AI Analysis Error:", error);
     return NextResponse.json(
-      {
-        error: "AI Processing Failed",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "AI Processing Failed", details: error instanceof Error ? error.message : "Unknown error" },
       { status: 500 }
     );
   }
 }
 
-// Handle OPTIONS preflight
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
