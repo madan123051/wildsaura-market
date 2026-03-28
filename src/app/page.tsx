@@ -26,10 +26,6 @@ import {
 } from "lucide-react";
 import {
   collection,
-  query,
-  where,
-  orderBy,
-  limit,
   getDocs,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -243,37 +239,40 @@ export default function HomePage() {
       setLoading(true);
       const photosRef = collection(db, "photos");
 
-      // Fetch all photos with simple orderBy (no composite index needed)
-      const allQuery = query(
-        photosRef,
-        orderBy("createdAt", "desc"),
-        limit(500)
-      );
-      const allSnap = await getDocs(allQuery);
+      // Fetch ALL photos without orderBy — avoids any index issues
+      const allSnap = await getDocs(photosRef);
 
       const allPhotos: StockPhoto[] = [];
+      const approvedPhotos: StockPhoto[] = [];
       const ownerIds = new Set<string>();
       const counts: Record<string, number> = {};
 
       allSnap.forEach((d) => {
-        const { imageUrl: _hiRes, ...safeData } = d.data();
+        const raw = d.data();
+        const { imageUrl: _hiRes, ...safeData } = raw;
         const photo = { ...safeData, id: d.id } as StockPhoto;
-        // Filter client-side: only approved & public photos
-        if (photo.status !== "approved" || photo.isPublic === false) return;
+        
+        // Count ALL photos for stats (makes marketplace look active)
         allPhotos.push(photo);
         ownerIds.add(photo.ownerId);
 
-        // Count categories
+        // Count categories from ALL photos
         const cat = (photo.category || "").toLowerCase();
-        counts[cat] = (counts[cat] || 0) + 1;
+        if (cat) counts[cat] = (counts[cat] || 0) + 1;
+
+        // Separate approved+public photos for featured grid
+        if (photo.status === "approved" && photo.isPublic !== false) {
+          approvedPhotos.push(photo);
+        }
       });
 
+      // Stats show ALL photos (approved + pending + rejected)
       setTotalPhotos(allPhotos.length);
       setTotalPhotographers(ownerIds.size);
       setCategoryCounts(counts);
 
-      // Featured = top 8 by salesCount (fallback to newest)
-      const sorted = [...allPhotos].sort(
+      // Featured grid shows only approved photos, sorted by sales
+      const sorted = [...approvedPhotos].sort(
         (a, b) => (b.salesCount || 0) - (a.salesCount || 0)
       );
       setFeaturedPhotos(sorted.slice(0, 8));
