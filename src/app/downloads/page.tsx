@@ -11,8 +11,11 @@ import {
   LogIn,
   Calendar,
   Package,
-  ExternalLink,
   Search,
+  ShieldCheck,
+  FileArchive,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   collection,
@@ -35,6 +38,7 @@ export default function DownloadsPage() {
   const [downloads, setDownloads] = useState<DownloadType[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   /* ── auth ── */
   useEffect(() => {
@@ -57,15 +61,21 @@ export default function DownloadsPage() {
     async function fetchDownloads() {
       setLoading(true);
       try {
+        // Fetch all user downloads and sort client-side
         const q = query(
           collection(db, "downloads"),
-          where("buyerId", "==", user!.uid),
-          orderBy("purchasedAt", "desc")
+          where("buyerId", "==", user!.uid)
         );
         const snap = await getDocs(q);
         const items: DownloadType[] = [];
         snap.forEach((d) => {
           items.push({ id: d.id, ...d.data() } as DownloadType);
+        });
+        // Sort by purchasedAt descending (client-side)
+        items.sort((a, b) => {
+          const dateA = a.purchasedAt instanceof Date ? a.purchasedAt : (a.purchasedAt as any)?.toDate?.() || new Date(a.purchasedAt as any);
+          const dateB = b.purchasedAt instanceof Date ? b.purchasedAt : (b.purchasedAt as any)?.toDate?.() || new Date(b.purchasedAt as any);
+          return dateB.getTime() - dateA.getTime();
         });
         if (!cancelled) setDownloads(items);
       } catch (err) {
@@ -89,49 +99,71 @@ export default function DownloadsPage() {
       )
     : downloads;
 
-  /* ── secure download handler ── */
+  /* ── secure download handler (ZIP with license) ── */
   const handleDownload = async (dl: DownloadType) => {
     try {
       if (!user) {
         toast.error("Please log in to download");
         return;
       }
-      
-      toast.loading("Preparing download...", { id: "dl-" + dl.photoId });
-      
-      // Get auth token
+
+      toast.loading("📦 Preparing licensed download...", { id: "dl-" + dl.photoId });
+
       const token = await user.getIdToken();
-      
-      // Call secure download API
+
       const res = await fetch(`/api/download/${dl.photoId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
-      const data = await res.json();
-      
+
       if (!res.ok) {
-        toast.error(data.error || "Download failed", { id: "dl-" + dl.photoId });
+        const errData = await res.json().catch(() => ({}));
+        toast.error(errData.error || "Download failed", { id: "dl-" + dl.photoId });
         return;
       }
-      
-      if (data.downloadUrl) {
-        // Trigger download via hidden anchor
-        const a = document.createElement("a");
-        a.href = data.downloadUrl;
-        a.download = dl.title || "photo";
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        toast.success("Download started! 🎉", { id: "dl-" + dl.photoId });
+
+      // Get license code from header
+      const licenseCode = res.headers.get("X-License-Code");
+
+      // Get the ZIP blob
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+
+      // Get filename from Content-Disposition or generate one
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?(.+?)"?$/);
+      const filename = filenameMatch
+        ? filenameMatch[1]
+        : `WildSaura_${dl.title || "photo"}.zip`;
+
+      // Trigger download
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (licenseCode) {
+        toast.success(
+          `Download started! 🎉\nLicense: ${licenseCode}`,
+          { id: "dl-" + dl.photoId, duration: 6000 }
+        );
       } else {
-        toast.error("Download URL not available yet", { id: "dl-" + dl.photoId });
+        toast.success("Download started! 🎉", { id: "dl-" + dl.photoId });
       }
     } catch (err) {
       console.error("Download error:", err);
       toast.error("Download failed. Please try again.", { id: "dl-" + dl.photoId });
     }
+  };
+
+  /* ── copy license code ── */
+  const copyLicenseCode = (code: string, id: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    toast.success("License code copied!");
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   /* ── loading state ── */
@@ -181,7 +213,7 @@ export default function DownloadsPage() {
             My Downloads
           </h1>
           <p className="mt-1 text-gray-500">
-            Access your purchased photos anytime
+            Access your licensed photos anytime — each download includes a ZIP with your license certificate
           </p>
         </div>
 
@@ -209,20 +241,20 @@ export default function DownloadsPage() {
                 <p className="text-2xl font-bold text-brand-dark">
                   {downloads.length}
                 </p>
-                <p className="text-xs text-gray-500">Photos Purchased</p>
+                <p className="text-xs text-gray-500">Photos Licensed</p>
               </div>
             </div>
           </div>
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-card">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100">
-                <Package className="h-5 w-5 text-green-600" />
+                <ShieldCheck className="h-5 w-5 text-green-600" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-brand-dark">
                   {new Set(downloads.map((d) => d.orderId)).size}
                 </p>
-                <p className="text-xs text-gray-500">Orders</p>
+                <p className="text-xs text-gray-500">Licensed Orders</p>
               </div>
             </div>
           </div>
@@ -278,6 +310,17 @@ export default function DownloadsPage() {
               </div>
             </div>
 
+            {/* Verify link */}
+            <div className="mb-6 flex items-center gap-2 rounded-xl border border-green-100 bg-green-50 px-4 py-3">
+              <ShieldCheck className="h-5 w-5 text-green-600" />
+              <p className="text-sm text-green-700">
+                Each download includes a unique license code.{" "}
+                <Link href="/verify" className="font-semibold underline hover:text-green-800">
+                  Verify a license →
+                </Link>
+              </p>
+            </div>
+
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center py-16">
                 <Search className="mb-3 h-8 w-8 text-gray-300" />
@@ -325,12 +368,35 @@ export default function DownloadsPage() {
                         </span>
                       </div>
 
+                      {/* License code if available */}
+                      {(dl as any).lastLicenseCode && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <ShieldCheck className="h-3 w-3 text-green-500" />
+                          <span className="font-mono text-[10px] tracking-wider text-green-600">
+                            {(dl as any).lastLicenseCode}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyLicenseCode((dl as any).lastLicenseCode, dl.id);
+                            }}
+                            className="ml-auto text-gray-400 hover:text-brand-primary"
+                          >
+                            {copiedId === dl.id ? (
+                              <Check className="h-3 w-3 text-green-500" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </button>
+                        </div>
+                      )}
+
                       <button
                         onClick={() => handleDownload(dl)}
                         className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-primary/90 active:scale-[0.98]"
                       >
-                        <Download className="h-4 w-4" />
-                        Download
+                        <FileArchive className="h-4 w-4" />
+                        Download ZIP
                       </button>
                     </div>
                   </div>

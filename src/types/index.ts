@@ -108,6 +108,32 @@ export interface Download {
   thumbnailUrl: string;
   downloadedAt?: Date;
   purchasedAt: Date;
+  lastLicenseCode?: string;
+  lastDownloadAt?: Date;
+  downloadCount?: number;
+}
+
+// ─── License ──────────────────────────────────────────
+export type LicenseType = "standard" | "extended";
+
+export interface License {
+  id: string;
+  licenseCode: string;
+  photoId: string;
+  photoTitle: string;
+  thumbnailUrl: string;
+  buyerId: string;
+  buyerEmail: string;
+  photographerId: string;
+  photographerName: string;
+  category: string;
+  priceNPR: number;
+  orderId: string;
+  purchaseDate: Date;
+  downloadDate: Date;
+  isValid: boolean;
+  licenseType: LicenseType;
+  hasWatermark: boolean;
 }
 
 // ─── Partner License ──────────────────────────────────
