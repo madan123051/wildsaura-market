@@ -265,7 +265,7 @@ export async function GET(
     } catch (zipError) {
       console.error("ZIP creation failed:", zipError);
       // Fallback: return just the image
-      return new NextResponse(watermarkedBuffer, {
+      return new NextResponse(new Uint8Array(watermarkedBuffer), {
         headers: {
           "Content-Type": "image/jpeg",
           "Content-Disposition": `attachment; filename="${photo.title || "photo"}.jpg"`,
@@ -317,7 +317,7 @@ export async function GET(
       .replace(/[^a-zA-Z0-9_-]/g, "_")
       .substring(0, 50);
 
-    return new NextResponse(zipBuffer, {
+    return new NextResponse(new Uint8Array(zipBuffer), {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="WildSaura_${safeTitle}_${licenseCode}.zip"`,
