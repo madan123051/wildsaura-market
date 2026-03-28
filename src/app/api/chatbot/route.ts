@@ -20,14 +20,14 @@ async function getChatbotConfig(): Promise<{
           systemPrompt:
             data.chatbot.systemPrompt ||
             "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.",
-          enabled: Boolean(data.chatbot.enabled),
+          enabled: data.chatbot.enabled !== false,
         };
       }
     }
   } catch (e) {
     console.warn("Could not load chatbot config:", e);
   }
-  return { apiKey: "", model: "gemini-2.0-flash", systemPrompt: "", enabled: false };
+  return { apiKey: "", model: "gemini-2.0-flash", systemPrompt: "", enabled: true };
 }
 
 export async function POST(req: Request) {
