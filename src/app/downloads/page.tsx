@@ -89,13 +89,48 @@ export default function DownloadsPage() {
       )
     : downloads;
 
-  /* ── download handler ── */
-  const handleDownload = (dl: DownloadType) => {
-    if (dl.imageUrl) {
-      window.open(dl.imageUrl, "_blank");
-      toast.success("Download started!");
-    } else {
-      toast.error("Download link not yet available");
+  /* ── secure download handler ── */
+  const handleDownload = async (dl: DownloadType) => {
+    try {
+      if (!user) {
+        toast.error("Please log in to download");
+        return;
+      }
+      
+      toast.loading("Preparing download...", { id: "dl-" + dl.photoId });
+      
+      // Get auth token
+      const token = await user.getIdToken();
+      
+      // Call secure download API
+      const res = await fetch(`/api/download/${dl.photoId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        toast.error(data.error || "Download failed", { id: "dl-" + dl.photoId });
+        return;
+      }
+      
+      if (data.downloadUrl) {
+        // Trigger download via hidden anchor
+        const a = document.createElement("a");
+        a.href = data.downloadUrl;
+        a.download = dl.title || "photo";
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("Download started! 🎉", { id: "dl-" + dl.photoId });
+      } else {
+        toast.error("Download URL not available yet", { id: "dl-" + dl.photoId });
+      }
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Download failed. Please try again.", { id: "dl-" + dl.photoId });
     }
   };
 

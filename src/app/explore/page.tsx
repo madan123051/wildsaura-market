@@ -96,12 +96,17 @@ function PhotoCard({
       {/* Image Container */}
       <div className="relative aspect-[4/3] bg-surface-muted overflow-hidden">
         <Image
-          src={photo.thumbnailUrl || photo.imageUrl}
+          src={photo.thumbnailUrl}
           alt={photo.title}
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          quality={50}
         />
+        {/* Protect overlay */}
+        <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
 
         {/* Hover Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
@@ -204,12 +209,31 @@ function QuickViewModal({
       >
         <div className="relative aspect-[16/10] bg-surface-muted">
           <Image
-            src={photo.imageUrl || photo.thumbnailUrl}
+            src={photo.thumbnailUrl}
             alt={photo.title}
             fill
             className="object-contain bg-gray-900"
             sizes="(max-width: 768px) 100vw, 768px"
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            quality={60}
           />
+          {/* Watermark overlay */}
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
+            <div className="flex flex-col gap-14 -rotate-[30deg] opacity-[0.18]">
+              <span className="whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white">
+                WildSaura &nbsp;&nbsp; WildSaura &nbsp;&nbsp; WildSaura
+              </span>
+              <span className="whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white">
+                PREVIEW &nbsp;&nbsp; PREVIEW &nbsp;&nbsp; PREVIEW
+              </span>
+              <span className="whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white">
+                WildSaura &nbsp;&nbsp; WildSaura &nbsp;&nbsp; WildSaura
+              </span>
+            </div>
+          </div>
+          {/* Block overlay */}
+          <div className="absolute inset-0 z-[5]" onContextMenu={(e) => e.preventDefault()} />
           <button
             onClick={onClose}
             className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 backdrop-blur-sm p-2 rounded-full text-white transition-colors"

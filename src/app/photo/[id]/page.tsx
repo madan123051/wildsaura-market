@@ -144,7 +144,15 @@ function Lightbox({
           width={1600}
           height={1200}
           className="max-h-[90vh] w-auto rounded-lg object-contain"
-          unoptimized
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+        />
+        {/* Block overlay */}
+        <div
+          className="absolute inset-0 z-10"
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
         />
       </div>
     </div>
@@ -158,13 +166,16 @@ function RelatedPhotoCard({ photo }: { photo: StockPhoto }) {
     <Link href={`/photo/${photo.id}`} className="group block">
       <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-surface-muted shadow-card transition-shadow group-hover:shadow-card-hover">
         <Image
-          src={photo.thumbnailUrl || photo.imageUrl}
+          src={photo.thumbnailUrl}
           alt={photo.title}
           fill
           className="object-cover transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 768px) 50vw, 25vw"
-          unoptimized
+          draggable={false}
+          onContextMenu={(e) => e.preventDefault()}
+          quality={50}
         />
+        <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         <div className="absolute bottom-0 left-0 right-0 translate-y-2 p-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <p className="truncate text-sm font-medium text-white">
@@ -372,7 +383,7 @@ export default function PhotoDetailPage() {
       <Toaster position="top-right" />
       {lightboxOpen && (
         <Lightbox
-          src={photo.imageUrl}
+          src={photo.thumbnailUrl || photo.imageUrl}
           alt={photo.title}
           onClose={() => setLightboxOpen(false)}
         />
@@ -403,21 +414,43 @@ export default function PhotoDetailPage() {
               className="group relative cursor-zoom-in overflow-hidden rounded-2xl bg-surface-muted shadow-card"
               onClick={() => setLightboxOpen(true)}
             >
-              <div className="relative aspect-[4/3]">
+              <div
+                className="relative aspect-[4/3]"
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+                style={{ userSelect: "none", WebkitUserSelect: "none" }}
+              >
                 <Image
-                  src={photo.imageUrl}
+                  src={photo.thumbnailUrl || photo.imageUrl}
                   alt={photo.title}
                   fill
                   priority
                   className="object-contain"
                   sizes="(max-width: 1024px) 100vw, 60vw"
-                  unoptimized
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
+                  quality={60}
+                />
+                {/* Block overlay to prevent save-as */}
+                <div
+                  className="absolute inset-0 z-[5]"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onDragStart={(e) => e.preventDefault()}
                 />
                 {/* watermark */}
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
-                  <span className="select-none whitespace-nowrap font-heading text-4xl font-bold tracking-widest text-white/20 sm:text-5xl lg:text-6xl -rotate-[30deg]">
-                    WildSaura Preview
-                  </span>
+                  <div className="flex flex-col gap-12 -rotate-[30deg]">
+                    <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+                      WildSaura &nbsp; WildSaura &nbsp; WildSaura
+                    </span>
+                    <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+                      PREVIEW ONLY &nbsp; PREVIEW ONLY
+                    </span>
+                    <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+                      WildSaura &nbsp; WildSaura &nbsp; WildSaura
+                    </span>
+                  </div>
                 </div>
               </div>
               <div className="absolute bottom-3 right-3 rounded-lg bg-black/50 px-3 py-1.5 text-xs font-medium text-white opacity-0 transition group-hover:opacity-100">

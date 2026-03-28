@@ -19,6 +19,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   updateDoc,
   increment,
   serverTimestamp,
@@ -148,18 +149,28 @@ export default function CheckoutPage() {
         status: "paid",
       });
 
-      /* 5. Create download records + update salesCount */
-      const downloadPromises = items.map((item) =>
-        addDoc(collection(db, "downloads"), {
+      /* 5. Create download records (with actual imageUrl) + update salesCount */
+      const downloadPromises = items.map(async (item) => {
+        // Fetch the actual high-res imageUrl from the photo document
+        let imageUrl = "";
+        try {
+          const photoSnap = await getDoc(doc(db, "photos", item.photoId));
+          if (photoSnap.exists()) {
+            imageUrl = photoSnap.data()?.imageUrl || "";
+          }
+        } catch {
+          // Will be resolved via secure download API as fallback
+        }
+        return addDoc(collection(db, "downloads"), {
           orderId: orderRef.id,
           photoId: item.photoId,
           buyerId: user.uid,
-          imageUrl: "", // populated later from photo data
+          imageUrl,
           title: item.title,
           thumbnailUrl: item.thumbnailUrl,
           purchasedAt: serverTimestamp(),
-        })
-      );
+        });
+      });
 
       const salesPromises = items.map((item) =>
         updateDoc(doc(db, "photos", item.photoId), {
@@ -167,7 +178,24 @@ export default function CheckoutPage() {
         }).catch(() => {})
       );
 
-      await Promise.all([...downloadPromises, ...salesPromises]);
+      // Create purchase records for admin dashboard tracking
+      const purchasePromises = items.map((item) =>
+        addDoc(collection(db, "purchases"), {
+          buyerId: user.uid,
+          buyerEmail: user.email || "",
+          photoId: item.photoId,
+          photoTitle: item.title,
+          sellerId: "", // populated from photo data
+          sellerName: item.ownerName || "",
+          amountNPR: item.priceNPR,
+          orderId: orderRef.id,
+          paymentMethod: selectedPayment,
+          status: "completed",
+          purchasedAt: serverTimestamp(),
+        })
+      );
+
+      await Promise.all([...downloadPromises, ...salesPromises, ...purchasePromises]);
 
       /* 6. Clear cart & redirect */
       clearCart();

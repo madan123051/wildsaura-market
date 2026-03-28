@@ -431,7 +431,7 @@ export default function AdminDashboard() {
 
         // Collect recent purchases (first 5)
         if (recentPurchases.length < 5) {
-          recentPurchases.push({ id: d.id, ...data });
+          recentPurchases.push({ ...data, id: d.id });
         }
 
         // Track top sellers

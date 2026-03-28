@@ -121,12 +121,17 @@ function FeaturedPhotoCard({ photo }: { photo: StockPhoto }) {
       <div className="relative overflow-hidden rounded-xl shadow-card hover:shadow-card-hover transition-all duration-300 group-hover:-translate-y-1">
         <div className="relative aspect-[4/3] w-full bg-surface-muted">
           <Image
-            src={photo.thumbnailUrl || photo.imageUrl}
+            src={photo.thumbnailUrl}
             alt={photo.title}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            draggable={false}
+            onContextMenu={(e) => e.preventDefault()}
+            quality={50}
           />
+          {/* Protect overlay */}
+          <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
           {/* Hover Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
             <h3 className="text-white font-semibold text-sm line-clamp-1">
