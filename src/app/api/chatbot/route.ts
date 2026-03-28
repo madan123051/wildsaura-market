@@ -1,10 +1,123 @@
-{
-  "type": "file",
-  "name": "route.ts",
-  "path": "src/app/api/chatbot/route.ts",
-  "size": 3927,
-  "sha": "e3433a0def560619ec8175553e2883fe0b1adff9",
-  "content": "import { GoogleGenerativeAI } from \"@google/generative-ai\";\nimport { NextResponse } from \"next/server\";\nimport { adminDb } from \"@/lib/firebaseAdmin\";\n\n// Helper: Get chatbot AI config from Firestore\nasync function getChatbotConfig(): Promise<{\n  apiKey: string;\n  model: string;\n  systemPrompt: string;\n  enabled: boolean;\n}> {\n  try {\n    const snap = await adminDb.collection(\"settings\").doc(\"ai-config\").get();\n    if (snap.exists) {\n      const data = snap.data();\n      if (data?.chatbot) {\n        return {\n          apiKey: data.chatbot.apiKey || \"\",\n          model: data.chatbot.model || \"gemini-1.5-flash\",\n          systemPrompt:\n            data.chatbot.systemPrompt ||\n            \"You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.\",\n          enabled: Boolean(data.chatbot.enabled),\n        };\n      }\n    }\n  } catch (e) {\n    console.warn(\"Could not load chatbot config:\", e);\n  }\n  return { apiKey: \"\", model: \"gemini-1.5-flash\", systemPrompt: \"\", enabled: false };\n}\n\nexport async function POST(req: Request) {\n  try {\n    const { message, history } = await req.json();\n\n    if (!message || typeof message !== \"string\") {\n      return NextResponse.json(\n        { error: \"message is required\" },\n        { status: 400 }\n      );\n    }\n\n    const config = await getChatbotConfig();\n    if (!config.enabled) {\n      return NextResponse.json(\n        { error: \"Chatbot is currently disabled. Admin can enable it in AI Settings.\" },\n        { status: 503 }\n      );\n    }\n\n    if (!config.apiKey) {\n      return NextResponse.json(\n        { error: \"Chatbot AI API key not configured. Please set it in Admin → AI Settings.\" },\n        { status: 500 }\n      );\n    }\n\n    const genAI = new GoogleGenerativeAI(config.apiKey);\n    const model = genAI.getGenerativeModel({ model: config.model });\n\n    // Build context with marketplace info\n    const marketContext = `\n${config.systemPrompt}\n\nMARKETPLACE INFO:\n- WildSaura is a Nepali stock photography marketplace\n- Photographers upload nature, wildlife, landscape, street, culture, macro, aerial, underwater & adventure photos\n- Photos are reviewed by AI and admin before approval\n- Prices are in NPR (Nepali Rupees)\n- Categories: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure\n- Photographers earn from each sale\n- Buyers can purchase and download high-quality photos\n- Payment via eSewa\n\nIMPORTANT RULES:\n- Be helpful, friendly, and concise\n- Answer in the same language the user writes in\n- If you don't know something specific about a listing, say so honestly\n- Never make up photo URLs or specific listings\n- Guide users to browse the marketplace for specific photos\n- Keep responses under 200 words unless more detail is needed\n    `;\n\n    // Build chat history\n    const chatHistory = (history || []).map(\n      (msg: { role: string; content: string }) => ({\n        role: msg.role === \"user\" ? \"user\" : \"model\",\n        parts: [{ text: msg.content }],\n      })\n    );\n\n    const chat = model.startChat({\n      history: [\n        { role: \"user\", parts: [{ text: marketContext }] },\n        {\n          role: \"model\",\n          parts: [\n            {\n              text: \"Understood! I'm WildSaura Market assistant. I'll help users with photos, pricing, categories, and marketplace navigation. How can I help?\",\n            },\n          ],\n        },\n        ...chatHistory,\n      ],\n    });\n\n    const result = await chat.sendMessage(message);\n    const response = await result.response;\n    const text = response.text();\n\n    return NextResponse.json({ reply: text });\n  } catch (error) {\n    console.error(\"Chatbot Error:\", error);\n    return NextResponse.json(\n      {\n        error: \"Chatbot failed to respond\",\n        details: error instanceof Error ? error.message : \"Unknown error\",\n      },\n      { status: 500 }\n    );\n  }\n}\n",
-  "encoding": "base64",
-  "downloadUrl": "https://raw.githubusercontent.com/madan123051/wildsaura-market/main/src/app/api/chatbot/route.ts?token=B72JFFLRTX7FCZ352Z2CE4LJY76XG"
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebaseAdmin";
+
+// Helper: Get chatbot AI config from Firestore
+async function getChatbotConfig(): Promise<{
+  apiKey: string;
+  model: string;
+  systemPrompt: string;
+  enabled: boolean;
+}> {
+  try {
+    const snap = await adminDb.collection("settings").doc("ai-config").get();
+    if (snap.exists) {
+      const data = snap.data();
+      if (data?.chatbot) {
+        return {
+          apiKey: data.chatbot.apiKey || "",
+          model: data.chatbot.model || "gemini-2.0-flash",
+          systemPrompt:
+            data.chatbot.systemPrompt ||
+            "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.",
+          enabled: Boolean(data.chatbot.enabled),
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Could not load chatbot config:", e);
+  }
+  return { apiKey: "", model: "gemini-2.0-flash", systemPrompt: "", enabled: false };
+}
+
+export async function POST(req: Request) {
+  try {
+    const { message, history } = await req.json();
+
+    if (!message || typeof message !== "string") {
+      return NextResponse.json(
+        { error: "message is required" },
+        { status: 400 }
+      );
+    }
+
+    const config = await getChatbotConfig();
+    if (!config.enabled) {
+      return NextResponse.json(
+        { error: "Chatbot is currently disabled. Admin can enable it in AI Settings." },
+        { status: 503 }
+      );
+    }
+
+    if (!config.apiKey) {
+      return NextResponse.json(
+        { error: "Chatbot AI API key not configured. Please set it in Admin → AI Settings." },
+        { status: 500 }
+      );
+    }
+
+    const genAI = new GoogleGenerativeAI(config.apiKey);
+    const model = genAI.getGenerativeModel({ model: config.model });
+
+    // Build context with marketplace info
+    const marketContext = `
+${config.systemPrompt}
+
+MARKETPLACE INFO:
+- WildSaura is a Nepali stock photography marketplace
+- Photographers upload nature, wildlife, landscape, street, culture, macro, aerial, underwater & adventure photos
+- Photos are reviewed by AI and admin before approval
+- Prices are in NPR (Nepali Rupees)
+- Categories: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure
+- Photographers earn from each sale
+- Buyers can purchase and download high-quality photos
+- Payment via eSewa
+
+IMPORTANT RULES:
+- Be helpful, friendly, and concise
+- Answer in the same language the user writes in
+- If you don't know something specific about a listing, say so honestly
+- Never make up photo URLs or specific listings
+- Guide users to browse the marketplace for specific photos
+- Keep responses under 200 words unless more detail is needed
+    `;
+
+    // Build chat history
+    const chatHistory = (history || []).map(
+      (msg: { role: string; content: string }) => ({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      })
+    );
+
+    const chat = model.startChat({
+      history: [
+        { role: "user", parts: [{ text: marketContext }] },
+        {
+          role: "model",
+          parts: [
+            {
+              text: "Understood! I'm WildSaura Market assistant. I'll help users with photos, pricing, categories, and marketplace navigation. How can I help?",
+            },
+          ],
+        },
+        ...chatHistory,
+      ],
+    });
+
+    const result = await chat.sendMessage(message);
+    const response = await result.response;
+    const text = response.text();
+
+    return NextResponse.json({ reply: text });
+  } catch (error) {
+    console.error("Chatbot Error:", error);
+    return NextResponse.json(
+      {
+        error: "Chatbot failed to respond",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
+  }
 }

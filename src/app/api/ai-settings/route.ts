@@ -1,10 +1,122 @@
-{
-  "type": "file",
-  "name": "route.ts",
-  "path": "src/app/api/ai-settings/route.ts",
-  "size": 4251,
-  "sha": "c315264c90d9aa5b6398eb657104af05f745c5f8",
-  "content": "import { NextResponse } from \"next/server\";\nimport { adminDb, adminAuth } from \"@/lib/firebaseAdmin\";\n\nconst ADMIN_EMAIL = \"madan123050@gmail.com\";\nconst SETTINGS_DOC = \"ai-config\";\nconst SETTINGS_COLLECTION = \"settings\";\n\n// GET — Load AI settings\nexport async function GET(req: Request) {\n  try {\n    const authHeader = req.headers.get(\"authorization\");\n    if (!authHeader?.startsWith(\"Bearer \")) {\n      return NextResponse.json({ error: \"Unauthorized\" }, { status: 401 });\n    }\n\n    const token = authHeader.split(\"Bearer \")[1];\n    const decoded = await adminAuth.verifyIdToken(token);\n    if (decoded.email !== ADMIN_EMAIL) {\n      return NextResponse.json({ error: \"Forbidden\" }, { status: 403 });\n    }\n\n    const docRef = adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC);\n    const snap = await docRef.get();\n\n    if (!snap.exists) {\n      // Return defaults\n      return NextResponse.json({\n        photoAnalysis: {\n          label: \"Photo Analysis AI\",\n          description: \"Analyzes uploaded photos — generates title, tags, category, quality score & price suggestion\",\n          provider: \"gemini\",\n          apiKey: \"\",\n          model: \"gemini-1.5-flash\",\n          enabled: true,\n        },\n        chatbot: {\n          label: \"Market Chatbot AI\",\n          description: \"Customer support chatbot — answers market queries, photo search help, pricing info\",\n          provider: \"gemini\",\n          apiKey: \"\",\n          model: \"gemini-1.5-flash\",\n          enabled: false,\n          systemPrompt: \"You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise. Answer in the user's language.\",\n        },\n        contentModeration: {\n          label: \"Content Moderation AI\",\n          description: \"Auto-screens uploads for inappropriate, copyrighted, or low-quality content\",\n          provider: \"gemini\",\n          apiKey: \"\",\n          model: \"gemini-1.5-flash\",\n          enabled: false,\n        },\n        seoOptimization: {\n          label: \"SEO & Description AI\",\n          description: \"Generates SEO-optimized titles, meta descriptions & alt text for better discoverability\",\n          provider: \"gemini\",\n          apiKey: \"\",\n          model: \"gemini-1.5-flash\",\n          enabled: false,\n        },\n      });\n    }\n\n    return NextResponse.json(snap.data());\n  } catch (error) {\n    console.error(\"AI Settings GET Error:\", error);\n    return NextResponse.json(\n      { error: \"Failed to load AI settings\" },\n      { status: 500 }\n    );\n  }\n}\n\n// POST — Save AI settings\nexport async function POST(req: Request) {\n  try {\n    const authHeader = req.headers.get(\"authorization\");\n    if (!authHeader?.startsWith(\"Bearer \")) {\n      return NextResponse.json({ error: \"Unauthorized\" }, { status: 401 });\n    }\n\n    const token = authHeader.split(\"Bearer \")[1];\n    const decoded = await adminAuth.verifyIdToken(token);\n    if (decoded.email !== ADMIN_EMAIL) {\n      return NextResponse.json({ error: \"Forbidden\" }, { status: 403 });\n    }\n\n    const body = await req.json();\n\n    // Validate structure\n    const validKeys = [\"photoAnalysis\", \"chatbot\", \"contentModeration\", \"seoOptimization\"];\n    const sanitized: Record<string, unknown> = {};\n\n    for (const key of validKeys) {\n      if (body[key]) {\n        sanitized[key] = {\n          label: body[key].label || \"\",\n          description: body[key].description || \"\",\n          provider: body[key].provider || \"gemini\",\n          apiKey: body[key].apiKey || \"\",\n          model: body[key].model || \"gemini-1.5-flash\",\n          enabled: Boolean(body[key].enabled),\n          ...(key === \"chatbot\" ? { systemPrompt: body[key].systemPrompt || \"\" } : {}),\n        };\n      }\n    }\n\n    sanitized.updatedAt = new Date().toISOString();\n    sanitized.updatedBy = decoded.email;\n\n    const docRef = adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC);\n    await docRef.set(sanitized, { merge: true });\n\n    return NextResponse.json({ success: true, message: \"AI settings saved successfully\" });\n  } catch (error) {\n    console.error(\"AI Settings POST Error:\", error);\n    return NextResponse.json(\n      { error: \"Failed to save AI settings\" },\n      { status: 500 }\n    );\n  }\n}\n",
-  "encoding": "base64",
-  "downloadUrl": "https://raw.githubusercontent.com/madan123051/wildsaura-market/main/src/app/api/ai-settings/route.ts?token=B72JFFPPU7UNYIOSNM77SY3JY76XG"
+import { NextResponse } from "next/server";
+import { adminDb, adminAuth } from "@/lib/firebaseAdmin";
+
+const ADMIN_EMAIL = "madan123050@gmail.com";
+const SETTINGS_DOC = "ai-config";
+const SETTINGS_COLLECTION = "settings";
+
+// GET — Load AI settings
+export async function GET(req: Request) {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const token = authHeader.split("Bearer ")[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    if (decoded.email !== ADMIN_EMAIL) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const docRef = adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC);
+    const snap = await docRef.get();
+
+    if (!snap.exists) {
+      // Return defaults
+      return NextResponse.json({
+        photoAnalysis: {
+          label: "Photo Analysis AI",
+          description: "Analyzes uploaded photos — generates title, tags, category, quality score & price suggestion",
+          provider: "gemini",
+          apiKey: "",
+          model: "gemini-2.0-flash",
+          enabled: true,
+        },
+        chatbot: {
+          label: "Market Chatbot AI",
+          description: "Customer support chatbot — answers market queries, photo search help, pricing info",
+          provider: "gemini",
+          apiKey: "",
+          model: "gemini-2.0-flash",
+          enabled: false,
+          systemPrompt: "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise. Answer in the user's language.",
+        },
+        contentModeration: {
+          label: "Content Moderation AI",
+          description: "Auto-screens uploads for inappropriate, copyrighted, or low-quality content",
+          provider: "gemini",
+          apiKey: "",
+          model: "gemini-2.0-flash",
+          enabled: false,
+        },
+        seoOptimization: {
+          label: "SEO & Description AI",
+          description: "Generates SEO-optimized titles, meta descriptions & alt text for better discoverability",
+          provider: "gemini",
+          apiKey: "",
+          model: "gemini-2.0-flash",
+          enabled: false,
+        },
+      });
+    }
+
+    return NextResponse.json(snap.data());
+  } catch (error) {
+    console.error("AI Settings GET Error:", error);
+    return NextResponse.json(
+      { error: "Failed to load AI settings" },
+      { status: 500 }
+    );
+  }
+}
+
+// POST — Save AI settings
+export async function POST(req: Request) {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const token = authHeader.split("Bearer ")[1];
+    const decoded = await adminAuth.verifyIdToken(token);
+    if (decoded.email !== ADMIN_EMAIL) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = await req.json();
+
+    // Validate structure
+    const validKeys = ["photoAnalysis", "chatbot", "contentModeration", "seoOptimization"];
+    const sanitized: Record<string, unknown> = {};
+
+    for (const key of validKeys) {
+      if (body[key]) {
+        sanitized[key] = {
+          label: body[key].label || "",
+          description: body[key].description || "",
+          provider: body[key].provider || "gemini",
+          apiKey: body[key].apiKey || "",
+          model: body[key].model || "gemini-2.0-flash",
+          enabled: Boolean(body[key].enabled),
+          ...(key === "chatbot" ? { systemPrompt: body[key].systemPrompt || "" } : {}),
+        };
+      }
+    }
+
+    sanitized.updatedAt = new Date().toISOString();
+    sanitized.updatedBy = decoded.email;
+
+    const docRef = adminDb.collection(SETTINGS_COLLECTION).doc(SETTINGS_DOC);
+    await docRef.set(sanitized, { merge: true });
+
+    return NextResponse.json({ success: true, message: "AI settings saved successfully" });
+  } catch (error) {
+    console.error("AI Settings POST Error:", error);
+    return NextResponse.json(
+      { error: "Failed to save AI settings" },
+      { status: 500 }
+    );
+  }
 }
