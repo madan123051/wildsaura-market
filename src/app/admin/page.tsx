@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import {
   collection,
@@ -8,6 +8,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  addDoc,
   query,
   where,
   orderBy,
@@ -17,7 +18,8 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
+import { db, auth, storage } from "@/lib/firebase";
+import { ref as refStorage, uploadBytes, getDownloadURL } from "firebase/storage";
 import { StockPhoto, UserProfile, PhotoCategory, CATEGORIES } from "@/types";
 import Image from "next/image";
 import toast, { Toaster } from "react-hot-toast";
@@ -72,6 +74,9 @@ import {
   Globe,
   FileText,
   ShieldCheck,
+  Upload,
+  Loader2,
+  CheckCircle,
 } from "lucide-react";
 
 // ─── Admin Email ───────────────────────────────────────────────────────────────
@@ -142,7 +147,7 @@ function roleBadge(role: string) {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type TabKey = "overview" | "photos" | "users" | "listings" | "sales" | "ai-settings";
+type TabKey = "overview" | "photos" | "users" | "listings" | "sales" | "ai-settings" | "upload";
 type PhotoFilter = "all" | "pending" | "approved" | "rejected" | "appeal";
 
 interface PurchaseRecord {
@@ -265,6 +270,20 @@ export default function AdminDashboard() {
   // Stats / Overview
   const [stats, setStats] = useState<StatData | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
+
+  // Upload tab
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState("");
+  const [uploadImageUrl, setUploadImageUrl] = useState("");
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadTags, setUploadTags] = useState<string[]>([]);
+  const [uploadTagInput, setUploadTagInput] = useState("");
+  const [uploadCategory, setUploadCategory] = useState<string>("nature");
+  const [uploadPrice, setUploadPrice] = useState(100);
+  const [uploadStep, setUploadStep] = useState<"select" | "analyzing" | "edit" | "uploading" | "done">("select");
+  const [uploadAiError, setUploadAiError] = useState("");
+  const uploadFileRef = useRef<HTMLInputElement>(null);
 
   // ─── Auth Check ────────────────────────────────────────────────────────────
   // Only madan123050@gmail.com can access the admin dashboard
@@ -659,6 +678,119 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, activeTab, fetchAISettings]);
 
+  // ─── Admin Upload Handlers ──────────────────────────────────────────────────
+  const handleAdminFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    if (file.size > 15 * 1024 * 1024) { toast.error("Image must be under 15MB"); return; }
+    setUploadFile(file);
+    setUploadPreview(URL.createObjectURL(file));
+    setUploadStep("analyzing");
+    adminUploadAndAnalyze(file);
+  };
+
+  const adminUploadAndAnalyze = async (file: File) => {
+    if (!firebaseUser) return;
+    setUploadAiError("");
+    try {
+      const fileName = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+      const storageRef = refStorage(storage, `marketplace/${firebaseUser.uid}/${fileName}`);
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      setUploadImageUrl(downloadUrl);
+
+      try {
+        const aiResp = await fetch("/api/ai-analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: downloadUrl }),
+        });
+        if (aiResp.ok) {
+          const aiData = await aiResp.json();
+          setUploadTitle(aiData.title || "");
+          setUploadDescription(aiData.description || "");
+          setUploadTags(aiData.tags || []);
+          setUploadCategory(aiData.category || "nature");
+          const basePrice = aiData.quality_score >= 8 ? 200 : aiData.quality_score >= 6 ? 150 : 100;
+          const demandMul = aiData.market_demand === "High" ? 1.5 : aiData.market_demand === "Medium" ? 1.2 : 1;
+          setUploadPrice(Math.round(basePrice * demandMul));
+        } else {
+          setUploadAiError("AI analysis failed \u2014 fill details manually.");
+        }
+      } catch {
+        setUploadAiError("AI analysis failed \u2014 fill details manually.");
+      }
+      setUploadStep("edit");
+    } catch (err) {
+      console.error("Admin upload error:", err);
+      toast.error("Failed to upload image.");
+      setUploadStep("select");
+    }
+  };
+
+  const handleAdminUploadSubmit = async () => {
+    if (!firebaseUser || !uploadImageUrl) return;
+    if (!uploadTitle.trim()) { toast.error("Title is required"); return; }
+    if (uploadPrice < 10) { toast.error("Minimum price is NPR 10"); return; }
+
+    setUploadStep("uploading");
+    try {
+      await addDoc(collection(db, "photos"), {
+        ownerId: firebaseUser.uid,
+        ownerName: firebaseUser.displayName || firebaseUser.email || "Admin",
+        ownerAvatar: firebaseUser.photoURL || "",
+        imageUrl: uploadImageUrl,
+        thumbnailUrl: uploadImageUrl,
+        title: uploadTitle.trim(),
+        description: uploadDescription.trim(),
+        tags: uploadTags,
+        category: uploadCategory,
+        priceNPR: uploadPrice,
+        status: "approved",
+        isPublic: true,
+        salesCount: 0,
+        viewCount: 0,
+        downloadCount: 0,
+        qualityScore: 8,
+        aiQualityScore: 8,
+        marketDemand: "Medium",
+        aiRejected: false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setUploadStep("done");
+      toast.success("Photo uploaded & auto-approved! \ud83c\udf89");
+    } catch (err) {
+      console.error("Submit error:", err);
+      toast.error("Failed to submit.");
+      setUploadStep("edit");
+    }
+  };
+
+  const handleAdminUploadReset = () => {
+    setUploadFile(null);
+    setUploadPreview("");
+    setUploadImageUrl("");
+    setUploadTitle("");
+    setUploadDescription("");
+    setUploadTags([]);
+    setUploadTagInput("");
+    setUploadCategory("nature");
+    setUploadPrice(100);
+    setUploadStep("select");
+    setUploadAiError("");
+    if (uploadFileRef.current) uploadFileRef.current.value = "";
+  };
+
+  const handleAdminAddTag = () => {
+    const t = uploadTagInput.trim().toLowerCase();
+    if (t && !uploadTags.includes(t) && uploadTags.length < 25) {
+      setUploadTags([...uploadTags, t]);
+      setUploadTagInput("");
+    }
+  };
+
   // ─── Photo Actions ────────────────────────────────────────────────────────
 
   const updatePhotoStatus = async (photoId: string, status: "approved" | "rejected") => {
@@ -931,6 +1063,7 @@ export default function AdminDashboard() {
     { key: "listings", label: "Listings", icon: <ListChecks className="w-4 h-4" /> },
     { key: "sales", label: "Sales", icon: <ShoppingCart className="w-4 h-4" /> },
     { key: "ai-settings", label: "AI Settings", icon: <Settings className="w-4 h-4" /> },
+    { key: "upload", label: "Upload Photo", icon: <Upload className="w-4 h-4" /> },
   ];
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -2636,13 +2769,16 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">Model</label>
-                      <input
-                        type="text"
-                        value={aiSettings.photoAnalysis?.model || ""}
+                      <select
+                        value={aiSettings.photoAnalysis?.model || "gemini-2.0-flash"}
                         onChange={(e) => updateAIService("photoAnalysis", "model", e.target.value)}
-                        placeholder="gemini-2.0-flash"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Fast &amp; Efficient)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Most Capable)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast &amp; Smart)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Lightweight)</option>
+                      </select>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">API Key</label>
@@ -2727,13 +2863,16 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">Model</label>
-                      <input
-                        type="text"
-                        value={aiSettings.chatbot?.model || ""}
+                      <select
+                        value={aiSettings.chatbot?.model || "gemini-2.0-flash"}
                         onChange={(e) => updateAIService("chatbot", "model", e.target.value)}
-                        placeholder="gemini-2.0-flash"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Fast &amp; Efficient)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Most Capable)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast &amp; Smart)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Lightweight)</option>
+                      </select>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">API Key</label>
@@ -2828,13 +2967,16 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">Model</label>
-                      <input
-                        type="text"
-                        value={aiSettings.contentModeration?.model || ""}
+                      <select
+                        value={aiSettings.contentModeration?.model || "gemini-2.0-flash"}
                         onChange={(e) => updateAIService("contentModeration", "model", e.target.value)}
-                        placeholder="gemini-2.0-flash"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Fast &amp; Efficient)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Most Capable)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast &amp; Smart)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Lightweight)</option>
+                      </select>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">API Key</label>
@@ -2919,13 +3061,16 @@ export default function AdminDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">Model</label>
-                      <input
-                        type="text"
-                        value={aiSettings.seoOptimization?.model || ""}
+                      <select
+                        value={aiSettings.seoOptimization?.model || "gemini-2.0-flash"}
                         onChange={(e) => updateAIService("seoOptimization", "model", e.target.value)}
-                        placeholder="gemini-2.0-flash"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
+                        className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Fast &amp; Efficient)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Most Capable)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Fast &amp; Smart)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Lightweight)</option>
+                      </select>
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">API Key</label>
@@ -2991,6 +3136,195 @@ export default function AdminDashboard() {
                 <p>Could not load AI settings. Try refreshing.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ─── UPLOAD PHOTO TAB ────────────────────────────────────── */}
+        {activeTab === "upload" && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                  <Upload className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Admin Upload</h2>
+                  <p className="text-sm text-gray-500">Upload photos directly — auto-approved & published instantly</p>
+                </div>
+              </div>
+
+              {/* Step: Select File */}
+              {uploadStep === "select" && (
+                <div
+                  onClick={() => uploadFileRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-2xl p-16 text-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50 transition-all"
+                >
+                  <Camera className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Click to select a photo</h3>
+                  <p className="text-sm text-gray-500">JPG, PNG, WebP — Max 15MB</p>
+                  <input
+                    ref={uploadFileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAdminFileSelect}
+                  />
+                </div>
+              )}
+
+              {/* Step: Analyzing */}
+              {uploadStep === "analyzing" && (
+                <div className="text-center py-16">
+                  {uploadPreview && (
+                    <div className="w-48 h-48 mx-auto mb-6 rounded-xl overflow-hidden shadow-lg">
+                      <img src={uploadPreview} alt="Preview" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium">Uploading & analyzing with AI...</p>
+                </div>
+              )}
+
+              {/* Step: Edit Details */}
+              {uploadStep === "edit" && (
+                <div className="space-y-6">
+                  {/* Preview */}
+                  <div className="flex gap-6">
+                    {uploadPreview && (
+                      <div className="w-64 h-64 rounded-xl overflow-hidden shadow-md flex-shrink-0">
+                        <img src={uploadPreview} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-4">
+                      {uploadAiError && (
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-sm text-yellow-700 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4" />
+                          {uploadAiError}
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                        <input
+                          type="text"
+                          value={uploadTitle}
+                          onChange={(e) => setUploadTitle(e.target.value)}
+                          placeholder="Photo title..."
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea
+                          value={uploadDescription}
+                          onChange={(e) => setUploadDescription(e.target.value)}
+                          rows={3}
+                          placeholder="Describe the photo..."
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={uploadTagInput}
+                        onChange={(e) => setUploadTagInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAdminAddTag())}
+                        placeholder="Add tag..."
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                      <button
+                        onClick={handleAdminAddTag}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {uploadTags.map((tag) => (
+                        <span key={tag} className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">
+                          {tag}
+                          <button onClick={() => setUploadTags(uploadTags.filter(t => t !== tag))} className="hover:text-red-500">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Category & Price */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <select
+                        value={uploadCategory}
+                        onChange={(e) => setUploadCategory(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                      >
+                        {CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Price (NPR)</label>
+                      <input
+                        type="number"
+                        value={uploadPrice}
+                        onChange={(e) => setUploadPrice(Number(e.target.value))}
+                        min={10}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={handleAdminUploadSubmit}
+                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      Publish Photo
+                    </button>
+                    <button
+                      onClick={handleAdminUploadReset}
+                      className="px-6 py-3 border border-gray-300 rounded-xl font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step: Uploading */}
+              {uploadStep === "uploading" && (
+                <div className="text-center py-16">
+                  <Loader2 className="w-10 h-10 animate-spin text-emerald-600 mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium">Publishing photo...</p>
+                </div>
+              )}
+
+              {/* Step: Done */}
+              {uploadStep === "done" && (
+                <div className="text-center py-16">
+                  <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Photo Published! \ud83c\udf89</h3>
+                  <p className="text-gray-500 mb-6">Your photo is live and visible to all users.</p>
+                  <button
+                    onClick={handleAdminUploadReset}
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <Camera className="w-5 h-5" />
+                    Upload Another
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
