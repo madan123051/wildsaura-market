@@ -43,7 +43,6 @@ function Navbar() {
   const categoriesRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Check if current user is admin
   const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === "admin";
 
   // Auth listener
@@ -184,19 +183,22 @@ function Navbar() {
               )}
             </div>
 
-            <Link
-              href="/upload"
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
-            >
-              <Camera className="w-3.5 h-3.5" />
-              Sell
-            </Link>
+            {/* Admin-only: Sell button */}
+            {isAdmin && (
+              <Link
+                href="/upload"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                Sell
+              </Link>
+            )}
 
-            {/* Admin Panel - Desktop Nav */}
+            {/* Admin Panel button */}
             {isAdmin && (
               <Link
                 href="/admin"
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-purple-700 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
                 Admin
@@ -266,9 +268,7 @@ function Navbar() {
                       </p>
                       <p className="text-xs text-gray-400 truncate">{user.email}</p>
                       {isAdmin && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-                          <ShieldCheck className="w-3 h-3" /> ADMIN
-                        </span>
+                        <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full">ADMIN</span>
                       )}
                     </div>
 
@@ -306,17 +306,14 @@ function Navbar() {
                     </Link>
 
                     {isAdmin && (
-                      <>
-                        <div className="border-t border-surface-border my-1" />
-                        <Link
-                          href="/admin"
-                          onClick={() => setShowUserMenu(false)}
-                          className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 font-medium hover:bg-purple-50 transition-colors"
-                        >
-                          <ShieldCheck className="w-4 h-4" />
-                          Admin Panel
-                        </Link>
-                      </>
+                      <Link
+                        href="/admin"
+                        onClick={() => setShowUserMenu(false)}
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 hover:bg-purple-50 transition-colors"
+                      >
+                        <ShieldCheck className="w-4 h-4" />
+                        Admin Panel
+                      </Link>
                     )}
 
                     <div className="border-t border-surface-border mt-1 pt-1">
@@ -411,24 +408,15 @@ function Navbar() {
               </div>
             </div>
 
-            <Link
-              href="/upload"
-              onClick={() => setShowMobileMenu(false)}
-              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
-            >
-              <Camera className="w-4 h-4" />
-              Sell Your Photos
-            </Link>
-
-            {/* Admin Panel - Mobile */}
+            {/* Admin-only: Sell button in mobile */}
             {isAdmin && (
               <Link
-                href="/admin"
+                href="/upload"
                 onClick={() => setShowMobileMenu(false)}
-                className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
               >
-                <ShieldCheck className="w-4 h-4" />
-                Admin Panel
+                <Camera className="w-4 h-4" />
+                Sell Your Photos
               </Link>
             )}
 
@@ -457,9 +445,7 @@ function Navbar() {
                       </p>
                       <p className="text-xs text-gray-400">{user.email}</p>
                       {isAdmin && (
-                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
-                          <ShieldCheck className="w-3 h-3" /> ADMIN
-                        </span>
+                        <span className="inline-block mt-0.5 px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full">ADMIN</span>
                       )}
                     </div>
                   </div>
@@ -495,6 +481,16 @@ function Navbar() {
                     <Download className="w-4 h-4" />
                     My Downloads
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      onClick={() => setShowMobileMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      Admin Panel
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
