@@ -525,6 +525,40 @@ export default function AdminDashboard() {
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false);
   const [aiSettingsSaving, setAiSettingsSaving] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
+  const [apiKeyTestStatus, setApiKeyTestStatus] = useState<Record<string, "idle" | "testing" | "valid" | "invalid">>({});
+
+  const testApiKey = async (serviceKey: string) => {
+    if (!firebaseUser || !aiSettings) return;
+    const service = aiSettings[serviceKey as keyof AISettings] as AIServiceConfig;
+    if (!service?.apiKey) {
+      toast.error("Please enter an API key first");
+      return;
+    }
+
+    setApiKeyTestStatus((prev) => ({ ...prev, [serviceKey]: "testing" }));
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/ai-settings/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ apiKey: service.apiKey, model: service.model }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setApiKeyTestStatus((prev) => ({ ...prev, [serviceKey]: "valid" }));
+        toast.success("\u2705 API key is valid!");
+      } else {
+        setApiKeyTestStatus((prev) => ({ ...prev, [serviceKey]: "invalid" }));
+        toast.error(`\u274C Invalid key: ${data.error}`);
+      }
+    } catch {
+      setApiKeyTestStatus((prev) => ({ ...prev, [serviceKey]: "invalid" }));
+      toast.error("Failed to test API key");
+    }
+  };
 
   const fetchAISettings = useCallback(async () => {
     if (!firebaseUser) return;
@@ -2626,6 +2660,29 @@ export default function AdminDashboard() {
                         >
                           {showApiKeys["photoAnalysis"] ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                         </button>
+                        <button
+                          onClick={() => testApiKey("photoAnalysis")}
+                          disabled={apiKeyTestStatus["photoAnalysis"] === "testing" || !aiSettings.photoAnalysis?.apiKey}
+                          className={`px-3 py-2 border rounded-xl text-xs font-medium transition-all ${
+                            apiKeyTestStatus["photoAnalysis"] === "valid"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : apiKeyTestStatus["photoAnalysis"] === "invalid"
+                              ? "border-red-500 bg-red-50 text-red-700"
+                              : apiKeyTestStatus["photoAnalysis"] === "testing"
+                              ? "border-blue-300 bg-blue-50 text-blue-600"
+                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {apiKeyTestStatus["photoAnalysis"] === "testing" ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : apiKeyTestStatus["photoAnalysis"] === "valid" ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : apiKeyTestStatus["photoAnalysis"] === "invalid" ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            "Test"
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2693,6 +2750,29 @@ export default function AdminDashboard() {
                           className="px-3 py-2 border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
                         >
                           {showApiKeys["chatbot"] ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => testApiKey("chatbot")}
+                          disabled={apiKeyTestStatus["chatbot"] === "testing" || !aiSettings.chatbot?.apiKey}
+                          className={`px-3 py-2 border rounded-xl text-xs font-medium transition-all ${
+                            apiKeyTestStatus["chatbot"] === "valid"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : apiKeyTestStatus["chatbot"] === "invalid"
+                              ? "border-red-500 bg-red-50 text-red-700"
+                              : apiKeyTestStatus["chatbot"] === "testing"
+                              ? "border-blue-300 bg-blue-50 text-blue-600"
+                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {apiKeyTestStatus["chatbot"] === "testing" ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : apiKeyTestStatus["chatbot"] === "valid" ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : apiKeyTestStatus["chatbot"] === "invalid" ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            "Test"
+                          )}
                         </button>
                       </div>
                     </div>
@@ -2772,6 +2852,29 @@ export default function AdminDashboard() {
                         >
                           {showApiKeys["contentModeration"] ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
                         </button>
+                        <button
+                          onClick={() => testApiKey("contentModeration")}
+                          disabled={apiKeyTestStatus["contentModeration"] === "testing" || !aiSettings.contentModeration?.apiKey}
+                          className={`px-3 py-2 border rounded-xl text-xs font-medium transition-all ${
+                            apiKeyTestStatus["contentModeration"] === "valid"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : apiKeyTestStatus["contentModeration"] === "invalid"
+                              ? "border-red-500 bg-red-50 text-red-700"
+                              : apiKeyTestStatus["contentModeration"] === "testing"
+                              ? "border-blue-300 bg-blue-50 text-blue-600"
+                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {apiKeyTestStatus["contentModeration"] === "testing" ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : apiKeyTestStatus["contentModeration"] === "valid" ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : apiKeyTestStatus["contentModeration"] === "invalid" ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            "Test"
+                          )}
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -2839,6 +2942,29 @@ export default function AdminDashboard() {
                           className="px-3 py-2 border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
                         >
                           {showApiKeys["seoOptimization"] ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => testApiKey("seoOptimization")}
+                          disabled={apiKeyTestStatus["seoOptimization"] === "testing" || !aiSettings.seoOptimization?.apiKey}
+                          className={`px-3 py-2 border rounded-xl text-xs font-medium transition-all ${
+                            apiKeyTestStatus["seoOptimization"] === "valid"
+                              ? "border-green-500 bg-green-50 text-green-700"
+                              : apiKeyTestStatus["seoOptimization"] === "invalid"
+                              ? "border-red-500 bg-red-50 text-red-700"
+                              : apiKeyTestStatus["seoOptimization"] === "testing"
+                              ? "border-blue-300 bg-blue-50 text-blue-600"
+                              : "border-gray-300 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {apiKeyTestStatus["seoOptimization"] === "testing" ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : apiKeyTestStatus["seoOptimization"] === "valid" ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : apiKeyTestStatus["seoOptimization"] === "invalid" ? (
+                            <XCircle className="w-4 h-4" />
+                          ) : (
+                            "Test"
+                          )}
                         </button>
                       </div>
                     </div>
