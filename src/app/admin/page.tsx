@@ -193,6 +193,27 @@ interface StatData {
   topSellers: { name: string; sales: number; revenue: number }[];
 }
 
+// ─── AI Settings Types ─────────────────────────────────────────────────────────
+
+interface AIServiceConfig {
+  label: string;
+  description: string;
+  provider: string;
+  apiKey: string;
+  model: string;
+  enabled: boolean;
+  systemPrompt?: string;
+}
+
+interface AISettings {
+  photoAnalysis: AIServiceConfig;
+  chatbot: AIServiceConfig;
+  contentModeration: AIServiceConfig;
+  seoOptimization: AIServiceConfig;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
@@ -501,6 +522,84 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, activeTab, fetchStats]);
 
+  // ─── AI Settings State ────────────────────────────────────────────────────
+  const [aiSettings, setAiSettings] = useState<AISettings | null>(null);
+  const [aiSettingsLoading, setAiSettingsLoading] = useState(false);
+  const [aiSettingsSaving, setAiSettingsSaving] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
+
+  const fetchAISettings = useCallback(async () => {
+    if (!firebaseUser) return;
+    setAiSettingsLoading(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/ai-settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiSettings(data);
+      } else {
+        toast.error("Failed to load AI settings");
+      }
+    } catch {
+      toast.error("Failed to load AI settings");
+    } finally {
+      setAiSettingsLoading(false);
+    }
+  }, [firebaseUser]);
+
+  const saveAISettings = async () => {
+    if (!firebaseUser || !aiSettings) return;
+    setAiSettingsSaving(true);
+    try {
+      const token = await firebaseUser.getIdToken();
+      const res = await fetch("/api/ai-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(aiSettings),
+      });
+      if (res.ok) {
+        toast.success("AI settings saved successfully!");
+      } else {
+        toast.error("Failed to save AI settings");
+      }
+    } catch {
+      toast.error("Failed to save AI settings");
+    } finally {
+      setAiSettingsSaving(false);
+    }
+  };
+
+  const updateAIService = (
+    key: keyof AISettings,
+    field: string,
+    value: string | boolean
+  ) => {
+    setAiSettings((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [key]: { ...(prev[key] as AIServiceConfig), [field]: value },
+      };
+    });
+  };
+
+  const toggleApiKeyVisibility = (key: string) => {
+    setShowApiKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+
+  // ─── AI Settings fetch effect
+  useEffect(() => {
+    if (isAdmin && activeTab === "ai-settings") {
+      fetchAISettings();
+    }
+  }, [isAdmin, activeTab, fetchAISettings]);
+
   // ─── Photo Actions ────────────────────────────────────────────────────────
 
   const updatePhotoStatus = async (photoId: string, status: "approved" | "rejected") => {
@@ -762,102 +861,7 @@ export default function AdminDashboard() {
   }
 
 
-  // ─── AI Settings State ────────────────────────────────────────────────────
-  interface AIServiceConfig {
-    label: string;
-    description: string;
-    provider: string;
-    apiKey: string;
-    model: string;
-    enabled: boolean;
-    systemPrompt?: string;
-  }
 
-  interface AISettings {
-    photoAnalysis: AIServiceConfig;
-    chatbot: AIServiceConfig;
-    contentModeration: AIServiceConfig;
-    seoOptimization: AIServiceConfig;
-    updatedAt?: string;
-    updatedBy?: string;
-  }
-
-  const [aiSettings, setAiSettings] = useState<AISettings | null>(null);
-  const [aiSettingsLoading, setAiSettingsLoading] = useState(false);
-  const [aiSettingsSaving, setAiSettingsSaving] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
-
-  const fetchAISettings = useCallback(async () => {
-    if (!firebaseUser) return;
-    setAiSettingsLoading(true);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/ai-settings", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setAiSettings(data);
-      } else {
-        toast.error("Failed to load AI settings");
-      }
-    } catch {
-      toast.error("Failed to load AI settings");
-    } finally {
-      setAiSettingsLoading(false);
-    }
-  }, [firebaseUser]);
-
-  const saveAISettings = async () => {
-    if (!firebaseUser || !aiSettings) return;
-    setAiSettingsSaving(true);
-    try {
-      const token = await firebaseUser.getIdToken();
-      const res = await fetch("/api/ai-settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(aiSettings),
-      });
-      if (res.ok) {
-        toast.success("AI settings saved successfully!");
-      } else {
-        toast.error("Failed to save AI settings");
-      }
-    } catch {
-      toast.error("Failed to save AI settings");
-    } finally {
-      setAiSettingsSaving(false);
-    }
-  };
-
-  const updateAIService = (
-    key: keyof AISettings,
-    field: string,
-    value: string | boolean
-  ) => {
-    setAiSettings((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [key]: { ...(prev[key] as AIServiceConfig), [field]: value },
-      };
-    });
-  };
-
-  const toggleApiKeyVisibility = (key: string) => {
-    setShowApiKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-
-  // ─── AI Settings fetch effect
-  useEffect(() => {
-    if (isAdmin && activeTab === "ai-settings") {
-      fetchAISettings();
-    }
-  }, [isAdmin, activeTab, fetchAISettings]);
 
   // ─── Tab Config ───────────────────────────────────────────────────────────
 
