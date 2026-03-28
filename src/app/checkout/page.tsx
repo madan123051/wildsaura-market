@@ -440,7 +440,7 @@ export default function CheckoutPage() {
                         fill
                         className="object-cover"
                         sizes="56px"
-                        unoptimized
+                        quality={30}
                       />
                     </div>
                     <div className="flex-1 min-w-0">

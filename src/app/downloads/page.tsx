@@ -295,12 +295,12 @@ export default function DownloadsPage() {
                     {/* thumbnail */}
                     <div className="relative aspect-[16/10] overflow-hidden bg-surface-muted">
                       <Image
-                        src={dl.thumbnailUrl || dl.imageUrl}
+                        src={dl.thumbnailUrl}
                         alt={dl.title}
                         fill
                         className="object-cover transition-transform duration-500 group-hover:scale-105"
                         sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                        unoptimized
+                        quality={30}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
                     </div>

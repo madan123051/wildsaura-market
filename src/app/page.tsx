@@ -128,7 +128,7 @@ function FeaturedPhotoCard({ photo }: { photo: StockPhoto }) {
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
-            quality={50}
+            quality={30}
           />
           {/* Protect overlay */}
           <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
@@ -259,8 +259,8 @@ export default function HomePage() {
       const counts: Record<string, number> = {};
 
       allSnap.forEach((doc) => {
-        const data = doc.data() as Omit<StockPhoto, "id">;
-        const photo = { ...data, id: doc.id } as StockPhoto;
+        const { imageUrl: _hiRes, ...safeData } = doc.data();
+        const photo = { ...safeData, id: doc.id } as StockPhoto;
         allPhotos.push(photo);
         ownerIds.add(data.ownerId);
 

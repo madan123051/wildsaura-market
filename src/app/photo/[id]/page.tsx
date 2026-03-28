@@ -173,7 +173,7 @@ function RelatedPhotoCard({ photo }: { photo: StockPhoto }) {
           sizes="(max-width: 768px) 50vw, 25vw"
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
-          quality={50}
+          quality={30}
         />
         <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -256,7 +256,8 @@ export default function PhotoDetailPage() {
           if (!cancelled) setNotFound(true);
           return;
         }
-        const data = { id: snap.id, ...snap.data() } as StockPhoto;
+        const { imageUrl: _hiRes, ...safeData } = snap.data();
+        const data = { id: snap.id, ...safeData } as StockPhoto;
         if (data.status !== "approved" && data.status !== ("active" as any)) {
           if (!cancelled) setNotFound(true);
           return;
@@ -318,7 +319,7 @@ export default function PhotoDetailPage() {
     cart.push({
       photoId: photo.id,
       title: photo.title,
-      thumbnailUrl: photo.thumbnailUrl || photo.imageUrl,
+      thumbnailUrl: photo.thumbnailUrl,
       priceNPR: photo.priceNPR,
       ownerName: photo.ownerName,
     });
@@ -334,7 +335,7 @@ export default function PhotoDetailPage() {
       cart.push({
         photoId: photo.id,
         title: photo.title,
-        thumbnailUrl: photo.thumbnailUrl || photo.imageUrl,
+        thumbnailUrl: photo.thumbnailUrl,
         priceNPR: photo.priceNPR,
         ownerName: photo.ownerName,
       });
@@ -383,7 +384,7 @@ export default function PhotoDetailPage() {
       <Toaster position="top-right" />
       {lightboxOpen && (
         <Lightbox
-          src={photo.thumbnailUrl || photo.imageUrl}
+          src={photo.thumbnailUrl}
           alt={photo.title}
           onClose={() => setLightboxOpen(false)}
         />
@@ -421,7 +422,7 @@ export default function PhotoDetailPage() {
                 style={{ userSelect: "none", WebkitUserSelect: "none" }}
               >
                 <Image
-                  src={photo.thumbnailUrl || photo.imageUrl}
+                  src={photo.thumbnailUrl}
                   alt={photo.title}
                   fill
                   priority
@@ -430,7 +431,7 @@ export default function PhotoDetailPage() {
                   draggable={false}
                   onContextMenu={(e) => e.preventDefault()}
                   onDragStart={(e) => e.preventDefault()}
-                  quality={60}
+                  quality={30}
                 />
                 {/* Block overlay to prevent save-as */}
                 <div

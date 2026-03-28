@@ -103,7 +103,7 @@ function PhotoCard({
           sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
           draggable={false}
           onContextMenu={(e) => e.preventDefault()}
-          quality={50}
+          quality={30}
         />
         {/* Protect overlay */}
         <div className="absolute inset-0 z-[2]" onContextMenu={(e) => e.preventDefault()} />
@@ -216,7 +216,7 @@ function QuickViewModal({
             sizes="(max-width: 768px) 100vw, 768px"
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
-            quality={60}
+            quality={30}
           />
           {/* Watermark overlay */}
           <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
@@ -413,8 +413,8 @@ function ExploreContent() {
         const snap = await getDocs(query(photosRef, ...dataConstraints));
         const fetched: StockPhoto[] = [];
         snap.forEach((doc) => {
-          const data = doc.data() as Omit<StockPhoto, "id">;
-          fetched.push({ ...data, id: doc.id } as StockPhoto);
+          const { imageUrl: _hiRes, ...safeData } = doc.data();
+          fetched.push({ ...safeData, id: doc.id } as StockPhoto);
         });
 
         // Client-side category filter
@@ -510,7 +510,7 @@ function ExploreContent() {
     const cartItem = {
       photoId: photo.id,
       title: photo.title,
-      thumbnailUrl: photo.thumbnailUrl || photo.imageUrl,
+      thumbnailUrl: photo.thumbnailUrl,
       priceNPR: photo.priceNPR,
       ownerName: photo.ownerName,
     };
