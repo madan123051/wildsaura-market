@@ -26,6 +26,8 @@ import { clearSessionCookie } from "@/lib/session";
 import type { UserProfile, CartItem } from "@/types";
 import { CATEGORIES } from "@/types";
 
+const ADMIN_EMAIL = "madan123050@gmail.com";
+
 function Navbar() {
   const router = useRouter();
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -40,6 +42,9 @@ function Navbar() {
 
   const categoriesRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Check if current user is admin
+  const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === "admin";
 
   // Auth listener
   useEffect(() => {
@@ -186,6 +191,17 @@ function Navbar() {
               <Camera className="w-3.5 h-3.5" />
               Sell
             </Link>
+
+            {/* Admin Panel - Desktop Nav */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-purple-700 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Right Side */}
@@ -249,6 +265,11 @@ function Navbar() {
                         {profile?.displayName || user.displayName || "User"}
                       </p>
                       <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                      {isAdmin && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                          <ShieldCheck className="w-3 h-3" /> ADMIN
+                        </span>
+                      )}
                     </div>
 
                     <Link
@@ -284,15 +305,18 @@ function Navbar() {
                       My Downloads
                     </Link>
 
-                    {profile?.role === "admin" && (
-                      <Link
-                        href="/admin"
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <ShieldCheck className="w-4 h-4" />
-                        Admin Panel
-                      </Link>
+                    {isAdmin && (
+                      <>
+                        <div className="border-t border-surface-border my-1" />
+                        <Link
+                          href="/admin"
+                          onClick={() => setShowUserMenu(false)}
+                          className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 font-medium hover:bg-purple-50 transition-colors"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          Admin Panel
+                        </Link>
+                      </>
                     )}
 
                     <div className="border-t border-surface-border mt-1 pt-1">
@@ -396,6 +420,18 @@ function Navbar() {
               Sell Your Photos
             </Link>
 
+            {/* Admin Panel - Mobile */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={() => setShowMobileMenu(false)}
+                className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-purple-700 hover:bg-purple-50 rounded-lg transition-colors"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Admin Panel
+              </Link>
+            )}
+
             <div className="border-t border-surface-border pt-3 mt-3">
               {user ? (
                 <>
@@ -420,6 +456,11 @@ function Navbar() {
                         {profile?.displayName || user.displayName || "User"}
                       </p>
                       <p className="text-xs text-gray-400">{user.email}</p>
+                      {isAdmin && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                          <ShieldCheck className="w-3 h-3" /> ADMIN
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Link
@@ -454,16 +495,6 @@ function Navbar() {
                     <Download className="w-4 h-4" />
                     My Downloads
                   </Link>
-                  {profile?.role === "admin" && (
-                    <Link
-                      href="/admin"
-                      onClick={() => setShowMobileMenu(false)}
-                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
-                    >
-                      <ShieldCheck className="w-4 h-4" />
-                      Admin Panel
-                    </Link>
-                  )}
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
