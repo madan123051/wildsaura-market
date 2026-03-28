@@ -243,8 +243,6 @@ export default function HomePage() {
       setLoading(true);
       const photosRef = collection(db, "photos");
 
-      // Use SAME query pattern as working explore page
-      // Firestore security rules REQUIRE status + isPublic filters
       const allQuery = query(
         photosRef,
         where("status", "==", "approved"),
@@ -258,14 +256,14 @@ export default function HomePage() {
       const ownerIds = new Set<string>();
       const counts: Record<string, number> = {};
 
-      allSnap.forEach((doc) => {
-        const { imageUrl: _hiRes, ...safeData } = doc.data();
-        const photo = { ...safeData, id: doc.id } as StockPhoto;
+      allSnap.forEach((d) => {
+        const { imageUrl: _hiRes, ...safeData } = d.data();
+        const photo = { ...safeData, id: d.id } as StockPhoto;
         allPhotos.push(photo);
-        ownerIds.add(data.ownerId);
+        ownerIds.add(photo.ownerId);
 
         // Count categories
-        const cat = (data.category || "").toLowerCase();
+        const cat = (photo.category || "").toLowerCase();
         counts[cat] = (counts[cat] || 0) + 1;
       });
 
