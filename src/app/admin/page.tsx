@@ -542,7 +542,7 @@ export default function AdminDashboard() {
             description: "Analyzes uploaded photos — generates title, tags, category, quality score & price suggestion",
             provider: "gemini",
             apiKey: "",
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             enabled: true,
           },
           chatbot: {
@@ -550,7 +550,7 @@ export default function AdminDashboard() {
             description: "Customer support chatbot — answers market queries, photo search help, pricing info",
             provider: "gemini",
             apiKey: "",
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             enabled: false,
             systemPrompt: "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise. Answer in the user\'s language.",
           },
@@ -559,7 +559,7 @@ export default function AdminDashboard() {
             description: "Auto-screens uploads for inappropriate, copyrighted, or low-quality content",
             provider: "gemini",
             apiKey: "",
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             enabled: false,
           },
           seoOptimization: {
@@ -567,7 +567,7 @@ export default function AdminDashboard() {
             description: "Generates SEO-optimized titles, meta descriptions & alt text for better discoverability",
             provider: "gemini",
             apiKey: "",
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             enabled: false,
           },
         });
@@ -2606,7 +2606,7 @@ export default function AdminDashboard() {
                         type="text"
                         value={aiSettings.photoAnalysis?.model || ""}
                         onChange={(e) => updateAIService("photoAnalysis", "model", e.target.value)}
-                        placeholder="gemini-1.5-flash"
+                        placeholder="gemini-2.0-flash"
                         className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2674,7 +2674,7 @@ export default function AdminDashboard() {
                         type="text"
                         value={aiSettings.chatbot?.model || ""}
                         onChange={(e) => updateAIService("chatbot", "model", e.target.value)}
-                        placeholder="gemini-1.5-flash"
+                        placeholder="gemini-2.0-flash"
                         className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2752,7 +2752,7 @@ export default function AdminDashboard() {
                         type="text"
                         value={aiSettings.contentModeration?.model || ""}
                         onChange={(e) => updateAIService("contentModeration", "model", e.target.value)}
-                        placeholder="gemini-1.5-flash"
+                        placeholder="gemini-2.0-flash"
                         className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -2820,7 +2820,7 @@ export default function AdminDashboard() {
                         type="text"
                         value={aiSettings.seoOptimization?.model || ""}
                         onChange={(e) => updateAIService("seoOptimization", "model", e.target.value)}
-                        placeholder="gemini-1.5-flash"
+                        placeholder="gemini-2.0-flash"
                         className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
