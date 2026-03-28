@@ -141,26 +141,34 @@ export function useAuth(): AuthState & AuthActions {
       await createUserProfile(u.uid, u.displayName ?? "User", u.email ?? "", u.photoURL ?? "");
     } catch (err: unknown) {
       const firebaseError = err as { code?: string; message?: string };
-      console.warn("Popup sign-in failed, trying redirect...", firebaseError.code);
+      const errorCode = firebaseError.code || "unknown";
+      const errorMsg = firebaseError.message || "Unknown error";
       
-      // If popup blocked or failed, fallback to redirect
-      if (
-        firebaseError.code === "auth/popup-blocked" ||
-        firebaseError.code === "auth/popup-closed-by-user" ||
-        firebaseError.code === "auth/cancelled-popup-request" ||
-        firebaseError.code === "auth/internal-error" ||
-        firebaseError.code === "auth/network-request-failed"
-      ) {
+      console.error("Google popup sign-in failed:", errorCode, errorMsg);
+      
+      // For these errors, try redirect as fallback
+      const redirectableCodes = [
+        "auth/popup-blocked",
+        "auth/popup-closed-by-user",
+        "auth/cancelled-popup-request",
+        "auth/internal-error",
+        "auth/network-request-failed",
+      ];
+      
+      if (redirectableCodes.includes(errorCode)) {
         try {
+          console.log("Trying signInWithRedirect fallback...");
           await signInWithRedirect(auth, googleProvider);
-          return; // Page will redirect, then getRedirectResult handles it
+          return;
         } catch (redirectErr: unknown) {
-          setError((redirectErr as Error).message);
+          const rErr = redirectErr as { code?: string; message?: string };
+          setError(`Redirect also failed [${rErr.code}]: ${rErr.message}`);
           throw redirectErr;
         }
       }
       
-      setError(firebaseError.message ?? "Google sign-in failed");
+      // Show detailed error for debugging
+      setError(`Google login failed [${errorCode}]: ${errorMsg}`);
       throw err;
     }
   };
