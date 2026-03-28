@@ -52,7 +52,18 @@ import {
   Save,
   Info,
   AlertCircle,
+  ShoppingCart,
+  CreditCard,
+  UserX,
+  Mail,
+  Calendar,
+  ArrowUpRight,
+  Hash,
+  Receipt,
 } from "lucide-react";
+
+// ─── Admin Email ───────────────────────────────────────────────────────────────
+const ADMIN_EMAIL = "madan123050@gmail.com";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -74,12 +85,36 @@ function formatDate(value: Timestamp | Date | string | null | undefined): string
   });
 }
 
+function formatDateTime(value: Timestamp | Date | string | null | undefined): string {
+  if (!value) return "N/A";
+  let date: Date;
+  if (value instanceof Timestamp) {
+    date = value.toDate();
+  } else if (value instanceof Date) {
+    date = value;
+  } else {
+    date = new Date(value);
+  }
+  if (isNaN(date.getTime())) return "N/A";
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-800 border-yellow-200",
     approved: "bg-green-100 text-green-800 border-green-200",
     rejected: "bg-red-100 text-red-800 border-red-200",
     appeal: "bg-orange-100 text-orange-800 border-orange-200",
+    completed: "bg-green-100 text-green-800 border-green-200",
+    paid: "bg-green-100 text-green-800 border-green-200",
+    failed: "bg-red-100 text-red-800 border-red-200",
+    refunded: "bg-purple-100 text-purple-800 border-purple-200",
   };
   return map[status] ?? "bg-gray-100 text-gray-800 border-gray-200";
 }
@@ -95,16 +130,41 @@ function roleBadge(role: string) {
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
-type TabKey = "photos" | "users" | "listings" | "stats";
+type TabKey = "overview" | "photos" | "users" | "listings" | "sales";
 type PhotoFilter = "all" | "pending" | "approved" | "rejected" | "appeal";
 
 interface PurchaseRecord {
   id: string;
   photoId: string;
+  photoTitle?: string;
   buyerId: string;
+  buyerEmail?: string;
   sellerId: string;
+  sellerName?: string;
   amountNPR: number;
+  paymentMethod?: string;
+  transactionRef?: string;
+  status?: string;
   createdAt: Timestamp | null;
+}
+
+interface OrderRecord {
+  id: string;
+  buyerId: string;
+  buyerEmail: string;
+  items: {
+    photoId: string;
+    title: string;
+    thumbnailUrl: string;
+    priceNPR: number;
+    ownerId: string;
+  }[];
+  totalNPR: number;
+  status: string;
+  paymentMethod: string;
+  paymentId?: string;
+  createdAt: Timestamp | null;
+  completedAt?: Timestamp | null;
 }
 
 interface StatData {
@@ -112,11 +172,14 @@ interface StatData {
   totalUsers: number;
   totalRevenue: number;
   totalPurchases: number;
+  totalOrders: number;
   categoryBreakdown: { category: string; count: number }[];
   pendingCount: number;
   approvedCount: number;
   rejectedCount: number;
   appealCount: number;
+  recentPurchases: PurchaseRecord[];
+  topSellers: { name: string; sales: number; revenue: number }[];
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -128,7 +191,7 @@ export default function AdminDashboard() {
   const [authLoading, setAuthLoading] = useState(true);
 
   // Tab
-  const [activeTab, setActiveTab] = useState<TabKey>("photos");
+  const [activeTab, setActiveTab] = useState<TabKey>("overview");
 
   // Photos tab
   const [photos, setPhotos] = useState<StockPhoto[]>([]);
@@ -158,25 +221,29 @@ export default function AdminDashboard() {
   });
   const [listingSearch, setListingSearch] = useState("");
 
-  // Stats tab
+  // Sales tab
+  const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [orders, setOrders] = useState<OrderRecord[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [salesSearch, setSalesSearch] = useState("");
+  const [salesView, setSalesView] = useState<"purchases" | "orders">("purchases");
+  const [viewOrder, setViewOrder] = useState<OrderRecord | null>(null);
+
+  // Stats / Overview
   const [stats, setStats] = useState<StatData | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
   // ─── Auth Check ────────────────────────────────────────────────────────────
+  // Only madan123050@gmail.com can access the admin dashboard
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
-            setIsAdmin(data.role === "admin");
-          } else {
-            setIsAdmin(false);
-          }
-        } catch {
+        // ✅ Check email matches admin email
+        if (user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
+          setIsAdmin(true);
+        } else {
           setIsAdmin(false);
         }
       } else {
@@ -275,6 +342,49 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, activeTab, fetchListings]);
 
+  // ─── Fetch Sales (Purchases & Orders) ─────────────────────────────────────
+
+  const fetchSales = useCallback(async () => {
+    setSalesLoading(true);
+    try {
+      // Fetch purchases
+      const purchasesSnap = await getDocs(
+        query(collection(db, "purchases"), orderBy("createdAt", "desc"))
+      );
+      const purchaseResults: PurchaseRecord[] = purchasesSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as PurchaseRecord[];
+      setPurchases(purchaseResults);
+
+      // Fetch orders
+      try {
+        const ordersSnap = await getDocs(
+          query(collection(db, "orders"), orderBy("createdAt", "desc"))
+        );
+        const orderResults: OrderRecord[] = ordersSnap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        })) as OrderRecord[];
+        setOrders(orderResults);
+      } catch {
+        // Orders collection might not exist yet
+        setOrders([]);
+      }
+    } catch (err) {
+      console.error("Error fetching sales:", err);
+      toast.error("Failed to load sales data");
+    } finally {
+      setSalesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isAdmin && activeTab === "sales") {
+      fetchSales();
+    }
+  }, [isAdmin, activeTab, fetchSales]);
+
   // ─── Fetch Stats ──────────────────────────────────────────────────────────
 
   const fetchStats = useCallback(async () => {
@@ -284,6 +394,14 @@ export default function AdminDashboard() {
       const photosSnap = await getCountFromServer(collection(db, "photos"));
       const usersSnap = await getCountFromServer(collection(db, "users"));
       const purchasesSnap = await getCountFromServer(collection(db, "purchases"));
+
+      let totalOrders = 0;
+      try {
+        const ordersSnap = await getCountFromServer(collection(db, "orders"));
+        totalOrders = ordersSnap.data().count;
+      } catch {
+        totalOrders = 0;
+      }
 
       const pendingSnap = await getCountFromServer(
         query(collection(db, "photos"), where("status", "==", "pending"))
@@ -299,12 +417,38 @@ export default function AdminDashboard() {
       );
 
       // Revenue from purchases
-      const purchasesDocs = await getDocs(collection(db, "purchases"));
+      const purchasesDocs = await getDocs(
+        query(collection(db, "purchases"), orderBy("createdAt", "desc"))
+      );
       let totalRevenue = 0;
+      const recentPurchases: PurchaseRecord[] = [];
+      const sellerMap = new Map<string, { name: string; sales: number; revenue: number }>();
+
       purchasesDocs.forEach((d) => {
         const data = d.data() as PurchaseRecord;
-        totalRevenue += data.amountNPR || 0;
+        const amount = data.amountNPR || 0;
+        totalRevenue += amount;
+
+        // Collect recent purchases (first 5)
+        if (recentPurchases.length < 5) {
+          recentPurchases.push({ id: d.id, ...data });
+        }
+
+        // Track top sellers
+        const sellerId = data.sellerId || "unknown";
+        const sellerName = data.sellerName || sellerId;
+        const existing = sellerMap.get(sellerId);
+        if (existing) {
+          existing.sales += 1;
+          existing.revenue += amount;
+        } else {
+          sellerMap.set(sellerId, { name: sellerName, sales: 1, revenue: amount });
+        }
       });
+
+      const topSellers = Array.from(sellerMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
 
       // Category breakdown
       const allPhotosSnap = await getDocs(collection(db, "photos"));
@@ -323,11 +467,14 @@ export default function AdminDashboard() {
         totalUsers: usersSnap.data().count,
         totalRevenue,
         totalPurchases: purchasesSnap.data().count,
+        totalOrders,
         categoryBreakdown,
         pendingCount: pendingSnap.data().count,
         approvedCount: approvedSnap.data().count,
         rejectedCount: rejectedSnap.data().count,
         appealCount: appealSnap.data().count,
+        recentPurchases,
+        topSellers,
       });
     } catch (err) {
       console.error("Error fetching stats:", err);
@@ -338,7 +485,7 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin && activeTab === "stats") {
+    if (isAdmin && activeTab === "overview") {
       fetchStats();
     }
   }, [isAdmin, activeTab, fetchStats]);
@@ -375,6 +522,17 @@ export default function AdminDashboard() {
       fetchPhotos();
     } catch {
       toast.error("Bulk update failed");
+    }
+  };
+
+  const deletePhoto = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this photo? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "photos", id));
+      toast.success("Photo deleted");
+      fetchPhotos();
+    } catch {
+      toast.error("Failed to delete photo");
     }
   };
 
@@ -418,6 +576,22 @@ export default function AdminDashboard() {
       );
     } catch {
       toast.error("Failed to toggle verification");
+    }
+  };
+
+  const deleteUser = async (uid: string, displayName: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete user "${displayName || uid}"? This will remove their profile data. This cannot be undone.`
+      )
+    )
+      return;
+    try {
+      await deleteDoc(doc(db, "users", uid));
+      toast.success("User deleted");
+      setUsers((prev) => prev.filter((u) => u.uid !== uid));
+    } catch {
+      toast.error("Failed to delete user");
     }
   };
 
@@ -491,6 +665,59 @@ export default function AdminDashboard() {
     );
   });
 
+  // ─── Sales Filters ────────────────────────────────────────────────────────
+
+  const filteredPurchases = purchases.filter((p) => {
+    if (!salesSearch) return true;
+    const q = salesSearch.toLowerCase();
+    return (
+      (p.photoTitle || "").toLowerCase().includes(q) ||
+      (p.buyerEmail || "").toLowerCase().includes(q) ||
+      (p.buyerId || "").toLowerCase().includes(q) ||
+      (p.sellerName || "").toLowerCase().includes(q) ||
+      (p.sellerId || "").toLowerCase().includes(q) ||
+      (p.paymentMethod || "").toLowerCase().includes(q)
+    );
+  });
+
+  const filteredOrders = orders.filter((o) => {
+    if (!salesSearch) return true;
+    const q = salesSearch.toLowerCase();
+    return (
+      (o.buyerEmail || "").toLowerCase().includes(q) ||
+      (o.status || "").toLowerCase().includes(q) ||
+      (o.paymentMethod || "").toLowerCase().includes(q) ||
+      o.id.toLowerCase().includes(q)
+    );
+  });
+
+  // Sales summary calculations
+  const totalSalesAmount = purchases.reduce((sum, p) => sum + (p.amountNPR || 0), 0);
+
+  // ─── Delete Purchase/Order ────────────────────────────────────────────────
+
+  const deletePurchase = async (id: string) => {
+    if (!confirm("Delete this purchase record? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "purchases", id));
+      toast.success("Purchase deleted");
+      setPurchases((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      toast.error("Failed to delete purchase");
+    }
+  };
+
+  const deleteOrder = async (id: string) => {
+    if (!confirm("Delete this order record? This cannot be undone.")) return;
+    try {
+      await deleteDoc(doc(db, "orders", id));
+      toast.success("Order deleted");
+      setOrders((prev) => prev.filter((o) => o.id !== id));
+    } catch {
+      toast.error("Failed to delete order");
+    }
+  };
+
   // ─── Loading / Auth States ────────────────────────────────────────────────
 
   if (authLoading) {
@@ -510,7 +737,14 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-xl shadow-card p-8 border border-surface-border max-w-md text-center">
           <Shield className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-500">You must be logged in as an admin to view this page.</p>
+          <p className="text-gray-500">
+            Admin dashboard is restricted. Only authorized admin can access this page.
+          </p>
+          {firebaseUser && (
+            <p className="text-sm text-gray-400 mt-3">
+              Logged in as: {firebaseUser.email}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -519,10 +753,11 @@ export default function AdminDashboard() {
   // ─── Tab Config ───────────────────────────────────────────────────────────
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode }[] = [
+    { key: "overview", label: "Overview", icon: <BarChart3 className="w-4 h-4" /> },
     { key: "photos", label: "Photos", icon: <Camera className="w-4 h-4" /> },
     { key: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
     { key: "listings", label: "Listings", icon: <ListChecks className="w-4 h-4" /> },
-    { key: "stats", label: "Stats", icon: <BarChart3 className="w-4 h-4" /> },
+    { key: "sales", label: "Sales", icon: <ShoppingCart className="w-4 h-4" /> },
   ];
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -534,13 +769,21 @@ export default function AdminDashboard() {
       {/* Header */}
       <div className="bg-white border-b border-surface-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <Shield className="w-5 h-5 text-emerald-700" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                <Shield className="w-5 h-5 text-emerald-700" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
+                <p className="text-sm text-gray-500">
+                  Full control — photos, users, listings, sales & stats
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="text-sm text-gray-500">Manage photos, users, listings &amp; stats</p>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Mail className="w-4 h-4" />
+              <span>{firebaseUser.email}</span>
             </div>
           </div>
         </div>
@@ -549,12 +792,12 @@ export default function AdminDashboard() {
       {/* Tabs */}
       <div className="bg-white border-b border-surface-border sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex gap-1">
+          <nav className="flex gap-1 overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                   activeTab === tab.key
                     ? "border-emerald-600 text-emerald-700"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -570,6 +813,226 @@ export default function AdminDashboard() {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        {/* ─── OVERVIEW TAB ──────────────────────────────────────────── */}
+        {activeTab === "overview" && (
+          <div>
+            {statsLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
+              </div>
+            ) : stats ? (
+              <div className="space-y-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                        <ImageIcon className="w-5 h-5 text-emerald-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Total Photos</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalPhotos}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                        <Users className="w-5 h-5 text-blue-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Total Users</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
+                        <DollarSign className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Revenue</p>
+                        <p className="text-2xl font-bold text-gray-900">
+                          NPR {stats.totalRevenue.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                        <ShoppingCart className="w-5 h-5 text-purple-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Total Sales</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalPurchases}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-pink-100 rounded-xl flex items-center justify-center">
+                        <Receipt className="w-5 h-5 text-pink-700" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-500">Orders</p>
+                        <p className="text-2xl font-bold text-gray-900">{stats.totalOrders}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Photo Status Breakdown */}
+                <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                  <h3 className="text-base font-bold text-gray-900 mb-4">Photo Status Breakdown</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200 text-center">
+                      <Clock className="w-6 h-6 text-yellow-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-yellow-800">{stats.pendingCount}</p>
+                      <p className="text-xs text-yellow-600 font-medium">Pending</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-xl p-4 border border-orange-200 text-center">
+                      <AlertCircle className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-orange-800">{stats.appealCount}</p>
+                      <p className="text-xs text-orange-600 font-medium">Appeals</p>
+                    </div>
+                    <div className="bg-green-50 rounded-xl p-4 border border-green-200 text-center">
+                      <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-green-800">{stats.approvedCount}</p>
+                      <p className="text-xs text-green-600 font-medium">Approved</p>
+                    </div>
+                    <div className="bg-red-50 rounded-xl p-4 border border-red-200 text-center">
+                      <XCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
+                      <p className="text-2xl font-bold text-red-800">{stats.rejectedCount}</p>
+                      <p className="text-xs text-red-600 font-medium">Rejected</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Recent Purchases */}
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-bold text-gray-900">Recent Sales</h3>
+                      <button
+                        onClick={() => setActiveTab("sales")}
+                        className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                      >
+                        View all <ArrowUpRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                    {stats.recentPurchases.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No sales yet</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {stats.recentPurchases.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">
+                                {p.photoTitle || p.photoId}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                Buyer: {p.buyerEmail || p.buyerId} • {formatDate(p.createdAt)}
+                              </p>
+                            </div>
+                            <span className="text-sm font-bold text-emerald-700">
+                              NPR {(p.amountNPR || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top Sellers */}
+                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                    <h3 className="text-base font-bold text-gray-900 mb-4">Top Sellers</h3>
+                    {stats.topSellers.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No sellers yet</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {stats.topSellers.map((s, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                                <span className="text-sm font-bold text-emerald-700">
+                                  #{i + 1}
+                                </span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{s.name}</p>
+                                <p className="text-xs text-gray-400">{s.sales} sales</p>
+                              </div>
+                            </div>
+                            <span className="text-sm font-bold text-gray-900">
+                              NPR {s.revenue.toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Categories */}
+                <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                  <h3 className="text-base font-bold text-gray-900 mb-4">Top Categories</h3>
+                  {stats.categoryBreakdown.length === 0 ? (
+                    <p className="text-sm text-gray-400">No categories to display</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {stats.categoryBreakdown.slice(0, 10).map((cat) => {
+                        const maxCount = stats.categoryBreakdown[0]?.count || 1;
+                        const pct = Math.round((cat.count / maxCount) * 100);
+                        return (
+                          <div key={cat.category}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-sm font-medium text-gray-700 capitalize">
+                                {cat.category}
+                              </span>
+                              <span className="text-sm text-gray-500">{cat.count} photos</span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2">
+                              <div
+                                className="bg-emerald-500 h-2 rounded-full transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Refresh */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={fetchStats}
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-700 flex items-center gap-1.5 text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Refresh Stats
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-16 text-gray-500">
+                <Info className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">Stats unavailable</p>
+                <p className="text-sm mt-1">Could not load statistics.</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ─── PHOTOS TAB ────────────────────────────────────────────── */}
         {activeTab === "photos" && (
           <div>
@@ -600,7 +1063,7 @@ export default function AdminDashboard() {
                     className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center gap-1.5"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    Bulk Approve ({selectedPhotoIds.size})
+                    Approve ({selectedPhotoIds.size})
                   </button>
                   <button
                     onClick={() => bulkUpdateStatus("rejected")}
@@ -608,7 +1071,7 @@ export default function AdminDashboard() {
                     className="bg-red-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center gap-1.5"
                   >
                     <XCircle className="w-4 h-4" />
-                    Bulk Reject ({selectedPhotoIds.size})
+                    Reject ({selectedPhotoIds.size})
                   </button>
                   <button
                     onClick={fetchPhotos}
@@ -649,8 +1112,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Photo</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Photographer</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Category</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-600">Quality</th>
-                        <th className="px-4 py-3 text-left font-semibold text-gray-600">Demand</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-600">Price</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
                       </tr>
@@ -718,23 +1180,10 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="text-gray-600 text-sm">{photo.category || "—"}</span>
+                            <span className="text-gray-600 text-sm capitalize">{photo.category || "—"}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3.5 h-3.5 text-yellow-500" />
-                              <span className="text-sm text-gray-700">
-                                {photo.qualityScore ?? photo.aiQualityScore ?? "—"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-1">
-                              <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
-                              <span className="text-sm text-gray-700">
-                                {photo.marketDemand ?? "—"}
-                              </span>
-                            </div>
+                            <span className="text-gray-700 font-medium text-sm">NPR {photo.priceNPR ?? 0}</span>
                           </td>
                           <td className="px-4 py-3">
                             <span
@@ -775,6 +1224,13 @@ export default function AdminDashboard() {
                                   <X className="w-4 h-4" />
                                 </button>
                               )}
+                              <button
+                                onClick={() => deletePhoto(photo.id)}
+                                className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -827,7 +1283,7 @@ export default function AdminDashboard() {
                       </div>
                       <div>
                         <span className="text-gray-400">Category</span>
-                        <p className="font-medium text-gray-900">{previewPhoto.category || "—"}</p>
+                        <p className="font-medium text-gray-900 capitalize">{previewPhoto.category || "—"}</p>
                       </div>
                       <div>
                         <span className="text-gray-400">Price</span>
@@ -903,6 +1359,15 @@ export default function AdminDashboard() {
                           <X className="w-4 h-4" /> Reject
                         </button>
                       )}
+                      <button
+                        onClick={() => {
+                          deletePhoto(previewPhoto.id);
+                          setPreviewPhoto(null);
+                        }}
+                        className="bg-red-100 text-red-700 px-4 py-2 rounded-xl font-medium hover:bg-red-200 flex items-center gap-1.5 text-sm"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete
+                      </button>
                       <button
                         onClick={() => setPreviewPhoto(null)}
                         className="px-4 py-2 rounded-xl font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 text-sm ml-auto"
@@ -1039,13 +1504,20 @@ export default function AdminDashboard() {
                             {formatDate(user.createdAt)}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-end">
+                            <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={() => setViewUser(user)}
                                 className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                                 title="View details"
                               >
                                 <Eye className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => deleteUser(user.uid, user.displayName)}
+                                className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                                title="Delete user"
+                              >
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -1153,7 +1625,16 @@ export default function AdminDashboard() {
                         </a>
                       </div>
                     )}
-                    <div className="mt-6 flex justify-end">
+                    <div className="mt-6 flex justify-between">
+                      <button
+                        onClick={() => {
+                          deleteUser(viewUser.uid, viewUser.displayName);
+                          setViewUser(null);
+                        }}
+                        className="px-4 py-2 rounded-xl font-medium text-red-600 hover:bg-red-50 border border-red-200 text-sm flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete User
+                      </button>
                       <button
                         onClick={() => setViewUser(null)}
                         className="px-4 py-2 rounded-xl font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 text-sm"
@@ -1216,6 +1697,7 @@ export default function AdminDashboard() {
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Price</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
                         <th className="px-4 py-3 text-left font-semibold text-gray-600">Public</th>
+                        <th className="px-4 py-3 text-left font-semibold text-gray-600">Sales</th>
                         <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
                       </tr>
                     </thead>
@@ -1250,7 +1732,7 @@ export default function AdminDashboard() {
                           <td className="px-4 py-3 text-gray-600 text-sm">
                             {listing.ownerName || "Unknown"}
                           </td>
-                          <td className="px-4 py-3 text-gray-600 text-sm">
+                          <td className="px-4 py-3 text-gray-600 text-sm capitalize">
                             {listing.category || "—"}
                           </td>
                           <td className="px-4 py-3 text-gray-700 font-medium text-sm">
@@ -1275,6 +1757,9 @@ export default function AdminDashboard() {
                             >
                               {listing.isPublic !== false ? "Yes" : "No"}
                             </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-700 text-sm">
+                            {listing.salesCount ?? 0}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
@@ -1323,13 +1808,13 @@ export default function AdminDashboard() {
                       </button>
                     </div>
 
-                    {/* Warning: photo cannot be changed */}
+                    {/* Warning */}
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5 flex items-start gap-2">
                       <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-medium text-amber-800">Photo cannot be changed</p>
                         <p className="text-xs text-amber-600 mt-0.5">
-                          Only listing metadata (title, description, price, category, tags, status, visibility) can be edited. The photo image itself cannot be replaced.
+                          Only listing metadata can be edited. The photo image itself cannot be replaced.
                         </p>
                       </div>
                     </div>
@@ -1412,8 +1897,8 @@ export default function AdminDashboard() {
                           >
                             <option value="">Select category</option>
                             {CATEGORIES.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
+                              <option key={cat.value} value={cat.value}>
+                                {cat.label}
                               </option>
                             ))}
                           </select>
@@ -1447,7 +1932,6 @@ export default function AdminDashboard() {
                             className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                           >
                             <option value="pending">Pending</option>
-                            <option value="appeal">Appeal (AI Rejected)</option>
                             <option value="approved">Approved</option>
                             <option value="rejected">Rejected</option>
                           </select>
@@ -1499,136 +1983,403 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ─── STATS TAB ─────────────────────────────────────────────── */}
-        {activeTab === "stats" && (
+        {/* ─── SALES TAB ─────────────────────────────────────────────── */}
+        {activeTab === "sales" && (
           <div>
-            {statsLoading ? (
-              <div className="flex items-center justify-center py-16">
-                <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
+            {/* Sales Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
+                    <DollarSign className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Revenue</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      NPR {totalSalesAmount.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
               </div>
-            ) : stats ? (
-              <div className="space-y-6">
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-                        <ImageIcon className="w-5 h-5 text-emerald-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Total Photos</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalPhotos}</p>
-                      </div>
-                    </div>
+              <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <ShoppingCart className="w-5 h-5 text-blue-700" />
                   </div>
-                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
-                        <Users className="w-5 h-5 text-blue-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Total Users</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center">
-                        <DollarSign className="w-5 h-5 text-amber-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Total Revenue</p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          NPR {stats.totalRevenue.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                        <Package className="w-5 h-5 text-purple-700" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Total Purchases</p>
-                        <p className="text-2xl font-bold text-gray-900">{stats.totalPurchases}</p>
-                      </div>
-                    </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Purchases</p>
+                    <p className="text-2xl font-bold text-gray-900">{purchases.length}</p>
                   </div>
                 </div>
-
-                {/* Photo Status Breakdown */}
-                <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                  <h3 className="text-base font-bold text-gray-900 mb-4">Photo Status Breakdown</h3>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200 text-center">
-                      <Clock className="w-6 h-6 text-yellow-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-yellow-800">{stats.pendingCount}</p>
-                      <p className="text-xs text-yellow-600 font-medium">Pending</p>
-                    </div>
-                    <div className="bg-orange-50 rounded-xl p-4 border border-orange-200 text-center">
-                      <AlertCircle className="w-6 h-6 text-orange-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-orange-800">{stats.appealCount}</p>
-                      <p className="text-xs text-orange-600 font-medium">Appeals</p>
-                    </div>
-                    <div className="bg-green-50 rounded-xl p-4 border border-green-200 text-center">
-                      <CheckCircle2 className="w-6 h-6 text-green-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-green-800">{stats.approvedCount}</p>
-                      <p className="text-xs text-green-600 font-medium">Approved</p>
-                    </div>
-                    <div className="bg-red-50 rounded-xl p-4 border border-red-200 text-center">
-                      <XCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-red-800">{stats.rejectedCount}</p>
-                      <p className="text-xs text-red-600 font-medium">Rejected</p>
-                    </div>
+              </div>
+              <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
+                    <Receipt className="w-5 h-5 text-purple-700" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Orders</p>
+                    <p className="text-2xl font-bold text-gray-900">{orders.length}</p>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Top Categories */}
-                <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border">
-                  <h3 className="text-base font-bold text-gray-900 mb-4">Top Categories</h3>
-                  {stats.categoryBreakdown.length === 0 ? (
-                    <p className="text-sm text-gray-400">No categories to display</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {stats.categoryBreakdown.slice(0, 10).map((cat) => {
-                        const maxCount = stats.categoryBreakdown[0]?.count || 1;
-                        const pct = Math.round((cat.count / maxCount) * 100);
-                        return (
-                          <div key={cat.category}>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-sm font-medium text-gray-700">{cat.category}</span>
-                              <span className="text-sm text-gray-500">{cat.count} photos</span>
-                            </div>
-                            <div className="w-full bg-gray-100 rounded-full h-2">
-                              <div
-                                className="bg-emerald-500 h-2 rounded-full transition-all"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+            {/* Search & Toggle */}
+            <div className="bg-white rounded-xl shadow-card p-5 border border-surface-border mb-6">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by buyer, seller, photo, payment method…"
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
                 </div>
-
-                {/* Refresh */}
-                <div className="flex justify-center">
+                <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
                   <button
-                    onClick={fetchStats}
-                    className="bg-emerald-600 text-white px-4 py-2 rounded-xl font-medium hover:bg-emerald-700 flex items-center gap-1.5 text-sm"
+                    onClick={() => setSalesView("purchases")}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      salesView === "purchases"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
                   >
-                    <RefreshCw className="w-4 h-4" /> Refresh Stats
+                    Purchases
+                  </button>
+                  <button
+                    onClick={() => setSalesView("orders")}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                      salesView === "orders"
+                        ? "bg-white text-gray-900 shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    Orders
                   </button>
                 </div>
+                <button
+                  onClick={fetchSales}
+                  className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
+                >
+                  <RefreshCw className={`w-4 h-4 ${salesLoading ? "animate-spin" : ""}`} />
+                </button>
               </div>
-            ) : (
-              <div className="text-center py-16 text-gray-500">
-                <Info className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                <p className="font-medium">Stats unavailable</p>
-                <p className="text-sm mt-1">Could not load statistics.</p>
+            </div>
+
+            {/* Purchases Table */}
+            {salesView === "purchases" && (
+              <div className="bg-white rounded-xl shadow-card border border-surface-border overflow-hidden">
+                {salesLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
+                  </div>
+                ) : filteredPurchases.length === 0 ? (
+                  <div className="text-center py-16 text-gray-500">
+                    <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No purchases found</p>
+                    <p className="text-sm mt-1">No purchase records to display.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-surface-border">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">
+                            <Hash className="w-4 h-4 inline mr-1" />ID
+                          </th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Photo</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Buyer</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Seller</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Amount</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Payment</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
+                          <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-border">
+                        {filteredPurchases.map((p) => (
+                          <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-gray-400 font-mono">
+                                {p.id.slice(0, 8)}…
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-gray-900 truncate max-w-[150px]">
+                                {p.photoTitle || p.photoId?.slice(0, 12) || "—"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-sm text-gray-700">
+                                {p.buyerEmail || p.buyerId?.slice(0, 12) || "—"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-sm text-gray-700">
+                                {p.sellerName || p.sellerId?.slice(0, 12) || "—"}
+                              </p>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm font-bold text-emerald-700">
+                                NPR {(p.amountNPR || 0).toLocaleString()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                                <CreditCard className="w-3 h-3" />
+                                {p.paymentMethod || "—"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${statusBadge(
+                                  p.status || "completed"
+                                )}`}
+                              >
+                                {p.status || "completed"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 text-xs">
+                              {formatDateTime(p.createdAt)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end">
+                                <button
+                                  onClick={() => deletePurchase(p.id)}
+                                  className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                                  title="Delete purchase"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Orders Table */}
+            {salesView === "orders" && (
+              <div className="bg-white rounded-xl shadow-card border border-surface-border overflow-hidden">
+                {salesLoading ? (
+                  <div className="flex items-center justify-center py-16">
+                    <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin" />
+                  </div>
+                ) : filteredOrders.length === 0 ? (
+                  <div className="text-center py-16 text-gray-500">
+                    <Receipt className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                    <p className="font-medium">No orders found</p>
+                    <p className="text-sm mt-1">No order records to display.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-surface-border">
+                        <tr>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Order ID</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Buyer</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Items</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Total</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Payment</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Status</th>
+                          <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
+                          <th className="px-4 py-3 text-right font-semibold text-gray-600">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-surface-border">
+                        {filteredOrders.map((o) => (
+                          <tr key={o.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-gray-400 font-mono">
+                                {o.id.slice(0, 8)}…
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 text-sm">
+                              {o.buyerEmail || o.buyerId?.slice(0, 12) || "—"}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 text-sm">
+                              {o.items?.length || 0} item(s)
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-sm font-bold text-emerald-700">
+                                NPR {(o.totalNPR || 0).toLocaleString()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex items-center gap-1 text-xs text-gray-600">
+                                <CreditCard className="w-3 h-3" />
+                                {o.paymentMethod || "—"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${statusBadge(
+                                  o.status
+                                )}`}
+                              >
+                                {o.status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 text-xs">
+                              {formatDateTime(o.createdAt)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => setViewOrder(o)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                                  title="View order"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteOrder(o.id)}
+                                  className="p-1.5 text-red-400 hover:text-red-600 rounded-lg hover:bg-red-50"
+                                  title="Delete order"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Order Detail Modal */}
+            {viewOrder && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                onClick={() => setViewOrder(null)}
+              >
+                <div
+                  className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold text-gray-900">Order Details</h3>
+                      <button
+                        onClick={() => setViewOrder(null)}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-4 text-sm">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="text-gray-400">Order ID</span>
+                          <p className="font-mono text-gray-900 text-xs">{viewOrder.id}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Buyer</span>
+                          <p className="font-medium text-gray-900">{viewOrder.buyerEmail}</p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Total</span>
+                          <p className="font-bold text-emerald-700 text-lg">
+                            NPR {(viewOrder.totalNPR || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Payment</span>
+                          <p className="font-medium text-gray-900 capitalize">
+                            {viewOrder.paymentMethod}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Status</span>
+                          <p>
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${statusBadge(
+                                viewOrder.status
+                              )}`}
+                            >
+                              {viewOrder.status}
+                            </span>
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Date</span>
+                          <p className="font-medium text-gray-900">
+                            {formatDateTime(viewOrder.createdAt)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Order Items */}
+                      <div>
+                        <span className="text-gray-400 block mb-2">
+                          Items ({viewOrder.items?.length || 0})
+                        </span>
+                        <div className="space-y-2">
+                          {(viewOrder.items || []).map((item, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-3 bg-gray-50 rounded-lg p-3"
+                            >
+                              <div className="w-10 h-10 rounded-lg overflow-hidden bg-gray-200 flex-shrink-0 relative">
+                                {item.thumbnailUrl ? (
+                                  <Image
+                                    src={item.thumbnailUrl}
+                                    alt={item.title || "Photo"}
+                                    fill
+                                    className="object-cover"
+                                    sizes="40px"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center">
+                                    <ImageIcon className="w-4 h-4 text-gray-400" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-gray-900 truncate">
+                                  {item.title || "Untitled"}
+                                </p>
+                              </div>
+                              <span className="font-bold text-gray-900">
+                                NPR {(item.priceNPR || 0).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-between">
+                      <button
+                        onClick={() => {
+                          deleteOrder(viewOrder.id);
+                          setViewOrder(null);
+                        }}
+                        className="px-4 py-2 rounded-xl font-medium text-red-600 hover:bg-red-50 border border-red-200 text-sm flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-4 h-4" /> Delete Order
+                      </button>
+                      <button
+                        onClick={() => setViewOrder(null)}
+                        className="px-4 py-2 rounded-xl font-medium text-gray-600 hover:bg-gray-100 border border-gray-200 text-sm"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
