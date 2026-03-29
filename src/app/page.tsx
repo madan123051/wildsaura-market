@@ -113,7 +113,7 @@ function AnimatedCounter({ target, label, icon }: { target: number; label: strin
 /* ───────────── Photo Card ───────────── */
 function FeaturedPhotoCard({ photo }: { photo: StockPhoto }) {
   return (
-    <Link href={`/explore?q=${encodeURIComponent(photo.title)}`} className="group block">
+    <Link href={`/photo/${photo.id}`} className="group block">
       <div className="relative overflow-hidden rounded-xl shadow-card hover:shadow-card-hover transition-all duration-300 group-hover:-translate-y-1">
         <div className="relative aspect-[4/3] w-full bg-surface-muted">
           <Image

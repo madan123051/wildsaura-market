@@ -92,7 +92,7 @@ function PhotoCard({
   const categoryInfo = CATEGORIES.find((c) => c.value === photo.category);
 
   return (
-    <div className="group rounded-xl overflow-hidden shadow-card hover:shadow-card-hover bg-white transition-all duration-300 hover:-translate-y-1">
+    <Link href={`/photo/${photo.id}`} className="group block rounded-xl overflow-hidden shadow-card hover:shadow-card-hover bg-white transition-all duration-300 hover:-translate-y-1">
       {/* Image Container */}
       <div className="relative aspect-[4/3] bg-surface-muted overflow-hidden">
         <Image
@@ -182,7 +182,7 @@ function PhotoCard({
           </button>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -299,12 +299,12 @@ function QuickViewModal({
               <ShoppingCart className="h-5 w-5" />
               Add to Cart
             </button>
-            <button
-              onClick={onClose}
-              className="px-6 py-3 border border-gray-200 hover:bg-surface-muted text-gray-600 font-semibold rounded-xl transition-colors duration-200"
+            <Link
+              href={`/photo/${photo.id}`}
+              className="px-6 py-3 border border-brand-primary hover:bg-brand-primary/10 text-brand-primary font-semibold rounded-xl transition-colors duration-200 text-center"
             >
-              Close
-            </button>
+              View Details
+            </Link>
           </div>
         </div>
       </div>
