@@ -14,7 +14,7 @@ async function getAIConfig(): Promise<{ apiKey: string; analysisModel: string; t
         return {
           apiKey: data.photoAnalysis.apiKey,
           analysisModel: "gemini-2.5-pro",  // Pro for deep image analysis
-          textModel: data.photoAnalysis.model || "gemini-2.0-flash",  // Flash for metadata
+          textModel: data.photoAnalysis.model || "gemini-2.5-flash",  // Flash for metadata
         };
       }
     }
@@ -24,7 +24,7 @@ async function getAIConfig(): Promise<{ apiKey: string; analysisModel: string; t
   return {
     apiKey: process.env.GEMINI_API_KEY || "",
     analysisModel: "gemini-2.5-pro",
-    textModel: "gemini-2.0-flash",
+    textModel: "gemini-2.5-flash",
   };
 }
 
@@ -60,15 +60,13 @@ export async function analyzeStockPhoto(imagePath: string) {
     const imagePart = fileToGenerativePart(imagePath, "image/jpeg");
 
     // --- STEP 1: DEEP ANALYSIS (using 2.5 Pro) ---
-    // This prompt is critical for Shutterstock-level detail.
     const deepAnalysisPrompt = `Analyze this image in extreme detail for stock photography purposes. Identify every object, texture, lighting style, composition technique (e.g., rule of thirds, macro), mood, the main subject's action, and background context. Mention any visible text, specific branding, or potential model release requirements. Describe the technical quality and resolution of the content shown.`;
 
     const analysisResult = await imageAnalyzer.generateContent([deepAnalysisPrompt, imagePart]);
     const deepAnalysisText = analysisResult.response.text();
     console.log("Deep Analysis Complete...");
 
-    // --- STEP 2: METADATA GENERATION (using 2.0 Flash) ---
-    // This prompt is optimized to parse analysis into perfect, ready-to-use metadata.
+    // --- STEP 2: METADATA GENERATION (using Flash) ---
     const metadataPrompt = `Based on this deep analysis: '${deepAnalysisText}', generate stock photography metadata in a structured JSON format. 
 
 Follow these strict rules:
@@ -84,7 +82,6 @@ Output only the JSON.`;
     const metadataResult = await textGenerator.generateContent(metadataPrompt);
     const finalMetadata = JSON.parse(metadataResult.response.text());
     
-    // finalMetadata object is now ready for your database/marketplace.
     return finalMetadata;
 
   } catch (error) {

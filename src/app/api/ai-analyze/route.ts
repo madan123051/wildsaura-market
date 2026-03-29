@@ -38,12 +38,14 @@ function normalizeCategory(raw: string): string {
   return "nature";
 }
 
-// Auto-migrate old model names to valid current ones
-const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+// Auto-migrate old/deprecated model names to valid current ones
+const VALID_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-lite"];
 function migrateModel(model: string | undefined): string {
   if (model && VALID_MODELS.includes(model)) return model;
+  if (model === "gemini-2.0-flash" || model?.includes("2.0-flash")) return "gemini-2.5-flash";
   if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
-  return "gemini-2.0-flash";
+  if (model?.includes("1.5-flash")) return "gemini-2.5-flash";
+  return "gemini-2.5-flash";
 }
 
 // Get AI API key from Firestore settings (fallback to env)
@@ -64,7 +66,7 @@ async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string
   }
   return {
     apiKey: process.env.GEMINI_API_KEY || "",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
   };
 }
 
@@ -167,7 +169,7 @@ export async function POST(req: Request) {
       - Return ONLY valid JSON, no extra text
     `;
 
-    // ─── Direct REST API call (no SDK dependency) ─────────────────────
+    // Direct REST API call
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
 
     const geminiResponse = await fetch(apiUrl, {
@@ -199,7 +201,7 @@ export async function POST(req: Request) {
       const errorMsg = errorData?.error?.message || `Gemini API error: ${geminiResponse.status}`;
       console.error("Gemini API Error:", errorMsg);
       return NextResponse.json(
-        { error: "AI API call failed", details: errorMsg },
+        { error: "AI analysis failed: " + errorMsg },
         { status: 500, headers: CORS_HEADERS }
       );
     }

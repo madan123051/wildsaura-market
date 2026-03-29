@@ -1,11 +1,30 @@
 import * as admin from "firebase-admin";
 
 /**
+ * Strip wrapping quotes from any env var value.
+ * Vercel sometimes stores values with extra " or ' around them.
+ */
+function cleanEnvValue(raw: string | undefined): string {
+  if (!raw) return "";
+  let val = raw.trim();
+  // Remove wrapping double quotes
+  if (val.startsWith('"') && val.endsWith('"')) {
+    val = val.slice(1, -1);
+  }
+  // Remove wrapping single quotes
+  if (val.startsWith("'") && val.endsWith("'")) {
+    val = val.slice(1, -1);
+  }
+  return val.trim();
+}
+
+/**
  * Robustly parse Firebase private key from environment variable.
  * Handles common Vercel/hosting formatting issues:
  * - Keys wrapped in double or single quotes
  * - JSON-encoded strings (escaped quotes)
  * - Literal \n vs real newlines
+ * - Double-escaped keys
  */
 function parsePrivateKey(raw: string): string {
   if (!raw) return "";
@@ -18,18 +37,25 @@ function parsePrivateKey(raw: string): string {
     (key.startsWith("'") && key.endsWith("'"))
   ) {
     try {
-      // JSON.parse handles \n → real newline automatically
       key = JSON.parse(key);
     } catch {
-      // Remove quotes manually if JSON.parse fails
       key = key.slice(1, -1);
     }
   }
 
-  // 2. Replace literal \n (two chars: backslash + n) with real newlines
+  // 2. Try JSON.parse again if still looks double-encoded
+  if (key.startsWith('"') || key.startsWith("'")) {
+    try {
+      key = JSON.parse(key);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Replace literal \n (two chars: backslash + n) with real newlines
   key = key.replace(/\\n/g, "\n");
 
-  // 3. Debug: Verify it looks like a PEM key
+  // 4. Debug: Verify it looks like a PEM key
   if (!key.includes("-----BEGIN")) {
     console.error(
       "[Firebase Admin] Private key does not contain PEM header.",
@@ -46,19 +72,22 @@ function parsePrivateKey(raw: string): string {
 function ensureApp() {
   if (!admin.apps.length) {
     // Support both FIREBASE_* and FIREBASE_ADMIN_* env var names
-    const projectId =
+    // cleanEnvValue strips wrapping quotes from all env vars
+    const projectId = cleanEnvValue(
       process.env.FIREBASE_PROJECT_ID ||
       process.env.FIREBASE_ADMIN_PROJECT_ID ||
-      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    );
 
-    const clientEmail =
+    const clientEmail = cleanEnvValue(
       process.env.FIREBASE_CLIENT_EMAIL ||
-      process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+      process.env.FIREBASE_ADMIN_CLIENT_EMAIL
+    );
 
-    const rawKey =
+    const rawKey = cleanEnvValue(
       process.env.FIREBASE_PRIVATE_KEY ||
-      process.env.FIREBASE_ADMIN_PRIVATE_KEY ||
-      "";
+      process.env.FIREBASE_ADMIN_PRIVATE_KEY
+    );
 
     const privateKey = parsePrivateKey(rawKey);
 
@@ -68,9 +97,11 @@ function ensureApp() {
         { projectId: !!projectId, clientEmail: !!clientEmail, privateKey: !!privateKey }
       );
       throw new Error(
-        "Firebase Admin credentials not configured. Required: FIREBASE_PROJECT_ID (or FIREBASE_ADMIN_PROJECT_ID), FIREBASE_CLIENT_EMAIL (or FIREBASE_ADMIN_CLIENT_EMAIL), FIREBASE_PRIVATE_KEY (or FIREBASE_ADMIN_PRIVATE_KEY)"
+        "Firebase Admin credentials not configured. Required: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY"
       );
     }
+
+    console.log(`[Firebase Admin] Initializing with project: ${projectId}, email: ${clientEmail.substring(0, 10)}...`);
 
     admin.initializeApp({
       credential: admin.credential.cert({

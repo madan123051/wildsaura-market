@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 
-// Auto-migrate old model names
-const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+// Auto-migrate old/deprecated model names
+const VALID_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-lite"];
 function migrateModel(model: string | undefined): string {
   if (model && VALID_MODELS.includes(model)) return model;
+  // Map deprecated models to current equivalents
+  if (model === "gemini-2.0-flash" || model?.includes("2.0-flash")) return "gemini-2.5-flash";
   if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
-  return "gemini-2.0-flash";
+  if (model?.includes("1.5-flash")) return "gemini-2.5-flash";
+  return "gemini-2.5-flash";
 }
 
 // Get chatbot AI config from Firestore (with env fallback)
@@ -37,7 +40,7 @@ async function getChatbotConfig(): Promise<{
   // Fallback: use GEMINI_API_KEY env var if Firestore is unavailable
   return {
     apiKey: process.env.GEMINI_API_KEY || "",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     systemPrompt:
       "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.",
     enabled: true,
@@ -95,7 +98,6 @@ IMPORTANT RULES:
 
     // Build chat history for Gemini REST API format
     const chatContents = [
-      // System context as first user message + model acknowledgment
       { role: "user", parts: [{ text: marketContext }] },
       {
         role: "model",
@@ -105,16 +107,14 @@ IMPORTANT RULES:
           },
         ],
       },
-      // Previous chat history
       ...(history || []).map((msg: { role: string; content: string }) => ({
         role: msg.role === "user" ? "user" : "model",
         parts: [{ text: msg.content }],
       })),
-      // Current message
       { role: "user", parts: [{ text: message }] },
     ];
 
-    // ─── Direct REST API call (no SDK dependency) ─────────────────────
+    // Direct REST API call
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
 
     const geminiResponse = await fetch(apiUrl, {

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 
+function cleanEnvValue(raw: string | undefined): string {
+  if (!raw) return "";
+  let val = raw.trim();
+  if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+  if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
+  return val.trim();
+}
+
 export async function GET() {
   const results: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
@@ -33,7 +41,7 @@ export async function GET() {
       // 2. Test Gemini API with Photo Analysis key
       if (data?.photoAnalysis?.apiKey) {
         try {
-          const model = data.photoAnalysis.model || "gemini-2.0-flash";
+          const model = data.photoAnalysis.model || "gemini-2.5-flash";
           const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${data.photoAnalysis.apiKey}`;
           const testResp = await fetch(testUrl, {
             method: "POST",
@@ -71,14 +79,27 @@ export async function GET() {
     };
   }
 
-  // 3. Check env vars (with key format debugging)
+  // 3. Check env vars (with detailed debug info)
   const rawKey = process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY || "";
+  const rawProjectId = process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "";
+  const rawClientEmail = process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL || "";
+
   (results as Record<string, unknown>).envVars = {
-    hasFirebaseProjectId: !!(process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
-    hasFirebaseClientEmail: !!(process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL),
+    hasFirebaseProjectId: !!rawProjectId,
+    hasFirebaseClientEmail: !!rawClientEmail,
     hasFirebasePrivateKey: !!rawKey,
     hasGeminiApiKeyEnv: !!process.env.GEMINI_API_KEY,
-    // Debug info for private key format (safe — no actual key data exposed)
+    // Debug: check if values have wrapping quotes (common Vercel mistake)
+    projectIdDebug: {
+      raw: rawProjectId.substring(0, 3) + "..." + rawProjectId.substring(rawProjectId.length - 3),
+      length: rawProjectId.length,
+      hasWrappingQuotes: (rawProjectId.startsWith('"') && rawProjectId.endsWith('"')) || (rawProjectId.startsWith("'") && rawProjectId.endsWith("'")),
+      cleaned: cleanEnvValue(rawProjectId),
+    },
+    clientEmailDebug: {
+      length: rawClientEmail.length,
+      hasWrappingQuotes: (rawClientEmail.startsWith('"') && rawClientEmail.endsWith('"')) || (rawClientEmail.startsWith("'") && rawClientEmail.endsWith("'")),
+    },
     privateKeyDebug: rawKey
       ? {
           length: rawKey.length,
