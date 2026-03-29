@@ -1,8 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 
-// Helper: Get chatbot AI config from Firestore
 // Auto-migrate old model names
 const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
 function migrateModel(model: string | undefined): string {
@@ -11,6 +9,7 @@ function migrateModel(model: string | undefined): string {
   return "gemini-2.0-flash";
 }
 
+// Get chatbot AI config from Firestore
 async function getChatbotConfig(): Promise<{
   apiKey: string;
   model: string;
@@ -64,10 +63,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const genAI = new GoogleGenerativeAI(config.apiKey);
-    const model = genAI.getGenerativeModel({ model: config.model });
-
-    // Build context with marketplace info
+    // Build marketplace context
     const marketContext = `
 ${config.systemPrompt}
 
@@ -90,32 +86,61 @@ IMPORTANT RULES:
 - Keep responses under 200 words unless more detail is needed
     `;
 
-    // Build chat history
-    const chatHistory = (history || []).map(
-      (msg: { role: string; content: string }) => ({
+    // Build chat history for Gemini REST API format
+    const chatContents = [
+      // System context as first user message + model acknowledgment
+      { role: "user", parts: [{ text: marketContext }] },
+      {
+        role: "model",
+        parts: [
+          {
+            text: "Understood! I'm WildSaura Market assistant. I'll help users with photos, pricing, categories, and marketplace navigation. How can I help?",
+          },
+        ],
+      },
+      // Previous chat history
+      ...(history || []).map((msg: { role: string; content: string }) => ({
         role: msg.role === "user" ? "user" : "model",
         parts: [{ text: msg.content }],
-      })
-    );
+      })),
+      // Current message
+      { role: "user", parts: [{ text: message }] },
+    ];
 
-    const chat = model.startChat({
-      history: [
-        { role: "user", parts: [{ text: marketContext }] },
-        {
-          role: "model",
-          parts: [
-            {
-              text: "Understood! I'm WildSaura Market assistant. I'll help users with photos, pricing, categories, and marketplace navigation. How can I help?",
-            },
-          ],
+    // ─── Direct REST API call (no SDK dependency) ─────────────────────
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+
+    const geminiResponse = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: chatContents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 512,
         },
-        ...chatHistory,
-      ],
+      }),
     });
 
-    const result = await chat.sendMessage(message);
-    const response = await result.response;
-    const text = response.text();
+    if (!geminiResponse.ok) {
+      const errorData = await geminiResponse.json().catch(() => ({}));
+      const errorMsg = errorData?.error?.message || `Gemini API error: ${geminiResponse.status}`;
+      console.error("Chatbot Gemini API Error:", errorMsg);
+      return NextResponse.json(
+        { error: "Chatbot failed to respond", details: errorMsg },
+        { status: 500 }
+      );
+    }
+
+    const geminiData = await geminiResponse.json();
+    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      return NextResponse.json(
+        { error: "Chatbot returned empty response" },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ reply: text });
   } catch (error) {

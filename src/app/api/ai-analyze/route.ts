@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 
@@ -39,7 +38,6 @@ function normalizeCategory(raw: string): string {
   return "nature";
 }
 
-// Helper: Get AI API key from Firestore settings (fallback to env)
 // Auto-migrate old model names to valid current ones
 const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
 function migrateModel(model: string | undefined): string {
@@ -48,6 +46,7 @@ function migrateModel(model: string | undefined): string {
   return "gemini-2.0-flash";
 }
 
+// Get AI API key from Firestore settings (fallback to env)
 async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string }> {
   try {
     const snap = await adminDb.collection("settings").doc("ai-config").get();
@@ -69,24 +68,20 @@ async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string
   };
 }
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 export async function POST(req: Request) {
   try {
-    const headers = {
-      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    };
-
-    if (req.method === "OPTIONS") {
-      return new NextResponse(null, { status: 204, headers });
-    }
-
     const { imageUrl } = await req.json();
 
     if (!imageUrl || typeof imageUrl !== "string") {
       return NextResponse.json(
         { error: "imageUrl is required and must be a string" },
-        { status: 400, headers }
+        { status: 400, headers: CORS_HEADERS }
       );
     }
 
@@ -95,12 +90,27 @@ export async function POST(req: Request) {
     if (!config.apiKey) {
       return NextResponse.json(
         { error: "AI API key not configured. Please set it in Admin → AI Settings." },
-        { status: 500, headers }
+        { status: 500, headers: CORS_HEADERS }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(config.apiKey);
-    const model = genAI.getGenerativeModel({ model: config.model });
+    // Fetch the image and convert to base64
+    const imageResp = await fetch(imageUrl);
+    if (!imageResp.ok) {
+      return NextResponse.json(
+        { error: `Failed to fetch image: ${imageResp.status}` },
+        { status: 400, headers: CORS_HEADERS }
+      );
+    }
+    const imageBuffer = await imageResp.arrayBuffer();
+    const base64Image = Buffer.from(imageBuffer).toString("base64");
+
+    const extension = imageUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+      gif: "image/gif", webp: "image/webp",
+    };
+    const mimeType = mimeMap[extension || ""] || "image/jpeg";
 
     const prompt = `
       You are a professional stock photography marketplace quality reviewer.
@@ -157,29 +167,58 @@ export async function POST(req: Request) {
       - Return ONLY valid JSON, no extra text
     `;
 
-    const imageResp = await fetch(imageUrl).then((res) => {
-      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
-      return res.arrayBuffer();
+    // ─── Direct REST API call (no SDK dependency) ─────────────────────
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${config.model}:generateContent?key=${config.apiKey}`;
+
+    const geminiResponse = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Image,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 1024,
+        },
+      }),
     });
 
-    const extension = imageUrl.split(".").pop()?.split("?")[0]?.toLowerCase();
-    const mimeMap: Record<string, string> = {
-      jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-      gif: "image/gif", webp: "image/webp",
-    };
-    const mimeType = mimeMap[extension || ""] || "image/jpeg";
+    if (!geminiResponse.ok) {
+      const errorData = await geminiResponse.json().catch(() => ({}));
+      const errorMsg = errorData?.error?.message || `Gemini API error: ${geminiResponse.status}`;
+      console.error("Gemini API Error:", errorMsg);
+      return NextResponse.json(
+        { error: "AI API call failed", details: errorMsg },
+        { status: 500, headers: CORS_HEADERS }
+      );
+    }
 
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: Buffer.from(imageResp).toString("base64"), mimeType } },
-    ]);
+    const geminiData = await geminiResponse.json();
+    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    const response = await result.response;
-    const text = response.text();
+    if (!text) {
+      return NextResponse.json(
+        { error: "AI returned empty response" },
+        { status: 500, headers: CORS_HEADERS }
+      );
+    }
 
+    // Parse the JSON response (strip markdown code blocks if any)
     const cleanText = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
     const parsed = JSON.parse(cleanText);
 
+    // Normalize and validate fields
     parsed.is_marketable = parsed.is_marketable === true;
     if (typeof parsed.rejection_reason !== "string") {
       parsed.rejection_reason = parsed.is_marketable ? "" : "Image quality does not meet marketplace standards.";
@@ -198,12 +237,12 @@ export async function POST(req: Request) {
       parsed.tags = [];
     }
 
-    return NextResponse.json(parsed, { headers });
+    return NextResponse.json(parsed, { headers: CORS_HEADERS });
   } catch (error) {
     console.error("AI Analysis Error:", error);
     return NextResponse.json(
       { error: "AI Processing Failed", details: error instanceof Error ? error.message : "Unknown error" },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }
@@ -211,10 +250,6 @@ export async function POST(req: Request) {
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
+    headers: CORS_HEADERS,
   });
 }
