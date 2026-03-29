@@ -729,18 +729,26 @@ export default function AdminDashboard() {
         });
         if (aiResp.ok) {
           const aiData = await aiResp.json();
-          setUploadTitle(aiData.title || "");
-          setUploadDescription(aiData.description || "");
-          setUploadTags(aiData.tags || []);
-          setUploadCategory(aiData.category || "nature");
-          const basePrice = aiData.quality_score >= 8 ? 200 : aiData.quality_score >= 6 ? 150 : 100;
-          const demandMul = aiData.market_demand === "High" ? 1.5 : aiData.market_demand === "Medium" ? 1.2 : 1;
-          setUploadPrice(Math.round(basePrice * demandMul));
+          if (aiData.is_marketable === false) {
+            setUploadAiError(`Photo rejected: ${aiData.rejection_reason || "Not suitable for marketplace"}`);
+          } else {
+            setUploadTitle(aiData.title || "");
+            setUploadDescription(aiData.description || "");
+            setUploadTags(aiData.tags || []);
+            setUploadCategory(aiData.category || "nature");
+            const basePrice = aiData.quality_score >= 8 ? 200 : aiData.quality_score >= 6 ? 150 : 100;
+            const demandMul = aiData.market_demand === "High" ? 1.5 : aiData.market_demand === "Medium" ? 1.2 : 1;
+            setUploadPrice(Math.round(basePrice * demandMul));
+          }
         } else {
-          setUploadAiError("AI analysis failed \u2014 fill details manually.");
+          const errData = await aiResp.json().catch(() => ({}));
+          const detail = errData?.details || errData?.error || `HTTP ${aiResp.status}`;
+          setUploadAiError(`AI analysis failed: ${detail}`);
+          console.error("AI analyze error:", errData);
         }
-      } catch {
-        setUploadAiError("AI analysis failed \u2014 fill details manually.");
+      } catch (aiErr) {
+        console.error("AI analyze exception:", aiErr);
+        setUploadAiError(`AI analysis failed: ${aiErr instanceof Error ? aiErr.message : "Network error"}`);
       }
       setUploadStep("edit");
     } catch (err) {

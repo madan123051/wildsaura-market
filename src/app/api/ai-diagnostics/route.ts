@@ -1,0 +1,83 @@
+import { NextResponse } from "next/server";
+import { adminDb } from "@/lib/firebaseAdmin";
+
+export async function GET() {
+  const results: Record<string, unknown> = {
+    timestamp: new Date().toISOString(),
+    checks: {},
+  };
+
+  // 1. Check Firebase Admin connection
+  try {
+    const snap = await adminDb.collection("settings").doc("ai-config").get();
+    if (snap.exists) {
+      const data = snap.data();
+      results.checks = {
+        firestoreConnected: true,
+        documentExists: true,
+        hasPhotoAnalysis: !!data?.photoAnalysis,
+        photoAnalysisEnabled: data?.photoAnalysis?.enabled ?? "missing",
+        photoAnalysisHasKey: !!data?.photoAnalysis?.apiKey,
+        photoAnalysisKeyLength: data?.photoAnalysis?.apiKey?.length ?? 0,
+        photoAnalysisModel: data?.photoAnalysis?.model ?? "missing",
+        hasChatbot: !!data?.chatbot,
+        chatbotEnabled: data?.chatbot?.enabled ?? "missing",
+        chatbotHasKey: !!data?.chatbot?.apiKey,
+        chatbotKeyLength: data?.chatbot?.apiKey?.length ?? 0,
+        chatbotModel: data?.chatbot?.model ?? "missing",
+        hasContentModeration: !!data?.contentModeration,
+        hasSeoOptimization: !!data?.seoOptimization,
+        allTopLevelKeys: Object.keys(data || {}),
+      };
+
+      // 2. Test Gemini API with Photo Analysis key
+      if (data?.photoAnalysis?.apiKey) {
+        try {
+          const model = data.photoAnalysis.model || "gemini-2.0-flash";
+          const testUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${data.photoAnalysis.apiKey}`;
+          const testResp = await fetch(testUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Say hello in one word" }] }],
+              generationConfig: { maxOutputTokens: 10 },
+            }),
+          });
+          const testData = await testResp.json();
+          (results.checks as Record<string, unknown>).geminiApiTest = testResp.ok
+            ? { status: "success", response: testData?.candidates?.[0]?.content?.parts?.[0]?.text }
+            : { status: "failed", error: testData?.error?.message, httpStatus: testResp.status };
+        } catch (e) {
+          (results.checks as Record<string, unknown>).geminiApiTest = {
+            status: "error",
+            message: e instanceof Error ? e.message : "Unknown",
+          };
+        }
+      } else {
+        (results.checks as Record<string, unknown>).geminiApiTest = "skipped - no API key found";
+      }
+    } else {
+      results.checks = {
+        firestoreConnected: true,
+        documentExists: false,
+        message: "Document settings/ai-config does NOT exist. Save settings in Admin Dashboard first!",
+      };
+    }
+  } catch (e) {
+    results.checks = {
+      firestoreConnected: false,
+      error: e instanceof Error ? e.message : "Unknown error",
+      hint: "Check FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, and FIREBASE_PRIVATE_KEY env vars in Vercel",
+    };
+  }
+
+  // 3. Check env vars
+  (results as Record<string, unknown>).envVars = {
+    hasFirebaseProjectId: !!(process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+    hasFirebaseClientEmail: !!(process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL),
+    hasFirebasePrivateKey: !!(process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY),
+    hasGeminiApiKeyEnv: !!process.env.GEMINI_API_KEY,
+  };
+
+  return NextResponse.json(results, { status: 200 });
+}
