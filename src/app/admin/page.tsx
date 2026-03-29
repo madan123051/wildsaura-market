@@ -713,7 +713,7 @@ export default function AdminDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
-    if (file.size > 15 * 1024 * 1024) { toast.error("Image must be under 15MB"); return; }
+    if (file.size > 100 * 1024 * 1024) { toast.error("Image must be under 100MB"); return; }
     setUploadFile(file);
     setUploadPreview(URL.createObjectURL(file));
     setUploadStep("analyzing");
@@ -3218,7 +3218,7 @@ export default function AdminDashboard() {
                 >
                   <Camera className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Click to select a photo</h3>
-                  <p className="text-sm text-gray-500">JPG, PNG, WebP — Max 15MB</p>
+                  <p className="text-sm text-gray-500">JPG, PNG, WebP — Max 100MB</p>
                   <input
                     ref={uploadFileRef}
                     type="file"
