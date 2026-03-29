@@ -2,36 +2,23 @@ import * as admin from "firebase-admin";
 
 /**
  * Strip wrapping quotes from any env var value.
- * Vercel sometimes stores values with extra " or ' around them.
  */
 function cleanEnvValue(raw: string | undefined): string {
   if (!raw) return "";
   let val = raw.trim();
-  // Remove wrapping double quotes
-  if (val.startsWith('"') && val.endsWith('"')) {
-    val = val.slice(1, -1);
-  }
-  // Remove wrapping single quotes
-  if (val.startsWith("'") && val.endsWith("'")) {
-    val = val.slice(1, -1);
-  }
+  if (val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+  if (val.startsWith("'") && val.endsWith("'")) val = val.slice(1, -1);
   return val.trim();
 }
 
 /**
  * Robustly parse Firebase private key from environment variable.
- * Handles common Vercel/hosting formatting issues:
- * - Keys wrapped in double or single quotes
- * - JSON-encoded strings (escaped quotes)
- * - Literal \n vs real newlines
- * - Double-escaped keys
  */
 function parsePrivateKey(raw: string): string {
   if (!raw) return "";
-
   let key = raw.trim();
 
-  // 1. If it looks like a JSON string (starts & ends with quotes), try JSON.parse
+  // If it looks like a JSON string, try JSON.parse
   if (
     (key.startsWith('"') && key.endsWith('"')) ||
     (key.startsWith("'") && key.endsWith("'"))
@@ -43,61 +30,82 @@ function parsePrivateKey(raw: string): string {
     }
   }
 
-  // 2. Try JSON.parse again if still looks double-encoded
+  // Try again if still double-encoded
   if (key.startsWith('"') || key.startsWith("'")) {
-    try {
-      key = JSON.parse(key);
-    } catch {
-      // ignore
-    }
+    try { key = JSON.parse(key); } catch { /* ignore */ }
   }
 
-  // 3. Replace literal \n (two chars: backslash + n) with real newlines
+  // Replace literal \\n with real newlines
   key = key.replace(/\\n/g, "\n");
 
-  // 4. Debug: Verify it looks like a PEM key
   if (!key.includes("-----BEGIN")) {
-    console.error(
-      "[Firebase Admin] Private key does not contain PEM header.",
-      "First 30 chars:",
-      JSON.stringify(key.substring(0, 30)),
-      "Length:",
-      key.length
-    );
+    console.error("[Firebase Admin] Private key missing PEM header. First 30 chars:", JSON.stringify(key.substring(0, 30)));
   }
 
   return key;
 }
 
+/**
+ * Try to get credentials from FIREBASE_SERVICE_ACCOUNT_JSON first (simplest),
+ * then fall back to individual env vars.
+ */
+function getCredentials(): { projectId: string; clientEmail: string; privateKey: string } {
+  // ========== METHOD 1: Single JSON env var (RECOMMENDED) ==========
+  const jsonRaw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  if (jsonRaw) {
+    try {
+      let jsonStr = jsonRaw.trim();
+      // Handle if wrapped in single quotes
+      if (jsonStr.startsWith("'") && jsonStr.endsWith("'")) {
+        jsonStr = jsonStr.slice(1, -1);
+      }
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.project_id && parsed.client_email && parsed.private_key) {
+        console.log("[Firebase Admin] Using FIREBASE_SERVICE_ACCOUNT_JSON");
+        return {
+          projectId: parsed.project_id,
+          clientEmail: parsed.client_email,
+          privateKey: parsed.private_key,
+        };
+      }
+    } catch (e) {
+      console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:", e);
+    }
+  }
+
+  // ========== METHOD 2: Individual env vars (fallback) ==========
+  const projectId = cleanEnvValue(
+    process.env.FIREBASE_PROJECT_ID ||
+    process.env.FIREBASE_ADMIN_PROJECT_ID ||
+    process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+  );
+
+  const clientEmail = cleanEnvValue(
+    process.env.FIREBASE_CLIENT_EMAIL ||
+    process.env.FIREBASE_ADMIN_CLIENT_EMAIL
+  );
+
+  const rawKey = cleanEnvValue(
+    process.env.FIREBASE_PRIVATE_KEY ||
+    process.env.FIREBASE_ADMIN_PRIVATE_KEY
+  );
+
+  const privateKey = parsePrivateKey(rawKey);
+
+  return { projectId, clientEmail, privateKey };
+}
+
 function ensureApp() {
   if (!admin.apps.length) {
-    // Support both FIREBASE_* and FIREBASE_ADMIN_* env var names
-    // cleanEnvValue strips wrapping quotes from all env vars
-    const projectId = cleanEnvValue(
-      process.env.FIREBASE_PROJECT_ID ||
-      process.env.FIREBASE_ADMIN_PROJECT_ID ||
-      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    );
-
-    const clientEmail = cleanEnvValue(
-      process.env.FIREBASE_CLIENT_EMAIL ||
-      process.env.FIREBASE_ADMIN_CLIENT_EMAIL
-    );
-
-    const rawKey = cleanEnvValue(
-      process.env.FIREBASE_PRIVATE_KEY ||
-      process.env.FIREBASE_ADMIN_PRIVATE_KEY
-    );
-
-    const privateKey = parsePrivateKey(rawKey);
+    const { projectId, clientEmail, privateKey } = getCredentials();
 
     if (!projectId || !clientEmail || !privateKey) {
       console.error(
-        "Firebase Admin init failed — missing env vars.",
+        "Firebase Admin init failed — missing credentials.",
         { projectId: !!projectId, clientEmail: !!clientEmail, privateKey: !!privateKey }
       );
       throw new Error(
-        "Firebase Admin credentials not configured. Required: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY"
+        "Firebase Admin credentials not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON or individual FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY env vars."
       );
     }
 
