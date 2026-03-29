@@ -71,12 +71,26 @@ export async function GET() {
     };
   }
 
-  // 3. Check env vars
+  // 3. Check env vars (with key format debugging)
+  const rawKey = process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY || "";
   (results as Record<string, unknown>).envVars = {
     hasFirebaseProjectId: !!(process.env.FIREBASE_PROJECT_ID || process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
     hasFirebaseClientEmail: !!(process.env.FIREBASE_CLIENT_EMAIL || process.env.FIREBASE_ADMIN_CLIENT_EMAIL),
-    hasFirebasePrivateKey: !!(process.env.FIREBASE_PRIVATE_KEY || process.env.FIREBASE_ADMIN_PRIVATE_KEY),
+    hasFirebasePrivateKey: !!rawKey,
     hasGeminiApiKeyEnv: !!process.env.GEMINI_API_KEY,
+    // Debug info for private key format (safe — no actual key data exposed)
+    privateKeyDebug: rawKey
+      ? {
+          length: rawKey.length,
+          startsWithQuote: rawKey.startsWith('"') || rawKey.startsWith("'"),
+          endsWithQuote: rawKey.endsWith('"') || rawKey.endsWith("'"),
+          hasPemHeader: rawKey.includes("-----BEGIN"),
+          hasLiteralNewlines: rawKey.includes("\\n"),
+          hasRealNewlines: rawKey.includes("\n"),
+          first20: rawKey.substring(0, 20).replace(/[A-Za-z0-9+/=]/g, "*"),
+          last20: rawKey.substring(rawKey.length - 20).replace(/[A-Za-z0-9+/=]/g, "*"),
+        }
+      : "not set",
   };
 
   return NextResponse.json(results, { status: 200 });
