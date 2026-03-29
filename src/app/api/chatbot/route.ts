@@ -9,7 +9,7 @@ function migrateModel(model: string | undefined): string {
   return "gemini-2.0-flash";
 }
 
-// Get chatbot AI config from Firestore
+// Get chatbot AI config from Firestore (with env fallback)
 async function getChatbotConfig(): Promise<{
   apiKey: string;
   model: string;
@@ -22,7 +22,7 @@ async function getChatbotConfig(): Promise<{
       const data = snap.data();
       if (data?.chatbot) {
         return {
-          apiKey: data.chatbot.apiKey || "",
+          apiKey: data.chatbot.apiKey || process.env.GEMINI_API_KEY || "",
           model: migrateModel(data.chatbot.model),
           systemPrompt:
             data.chatbot.systemPrompt ||
@@ -32,9 +32,16 @@ async function getChatbotConfig(): Promise<{
       }
     }
   } catch (e) {
-    console.warn("Could not load chatbot config:", e);
+    console.warn("Could not load chatbot config from Firestore, using env fallback:", e);
   }
-  return { apiKey: "", model: "gemini-2.0-flash", systemPrompt: "", enabled: true };
+  // Fallback: use GEMINI_API_KEY env var if Firestore is unavailable
+  return {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    model: "gemini-2.0-flash",
+    systemPrompt:
+      "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.",
+    enabled: true,
+  };
 }
 
 export async function POST(req: Request) {
@@ -58,7 +65,7 @@ export async function POST(req: Request) {
 
     if (!config.apiKey) {
       return NextResponse.json(
-        { error: "Chatbot AI API key not configured. Please set it in Admin → AI Settings." },
+        { error: "Chatbot AI API key not configured. Please set it in Admin → AI Settings, or add GEMINI_API_KEY to environment variables." },
         { status: 500 }
       );
     }
@@ -137,7 +144,7 @@ IMPORTANT RULES:
 
     if (!text) {
       return NextResponse.json(
-        { error: "Chatbot returned empty response" },
+        { error: "AI returned empty response" },
         { status: 500 }
       );
     }
@@ -147,7 +154,7 @@ IMPORTANT RULES:
     console.error("Chatbot Error:", error);
     return NextResponse.json(
       {
-        error: "Chatbot failed to respond",
+        error: "Chatbot failed",
         details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
