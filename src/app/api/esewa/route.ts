@@ -3,35 +3,56 @@ import crypto from "crypto";
 import admin from "@/lib/firebaseAdmin";
 import { adminAuth, adminDb } from "@/lib/firebaseAdmin";
 import { generateTransactionId } from "@/lib/utils";
-import type { ApiResponse, PhotoPurchase } from "@/types";
+import type { ApiResponse } from "@/types";
 
 /**
  * POST /api/esewa
- * Initiate eSewa payment: returns the form data to submit to eSewa.
+ * Initiate eSewa payment for an order.
  *
- * Body: { photoId: string, buyerId: string }
+ * Body: { orderId: string }
  * Headers: Authorization: Bearer <firebase_id_token>
  */
 export async function POST(req: NextRequest) {
   try {
     // ── Auth ────────────────────────────────────────────────────
-    const token   = req.headers.get("Authorization")?.replace("Bearer ", "");
-    if (!token) return NextResponse.json<ApiResponse>({ success: false, error: "Unauthorized" }, { status: 401 });
+    const token = req.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token)
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Unauthorized" },
+        { status: 401 }
+      );
     const decoded = await adminAuth.verifyIdToken(token);
 
-    const { photoId } = await req.json();
-
-    // ── Fetch photo ─────────────────────────────────────────────
-    const photoSnap = await adminDb.collection("photos").doc(photoId).get();
-    if (!photoSnap.exists) {
-      return NextResponse.json<ApiResponse>({ success: false, error: "Photo not found" }, { status: 404 });
+    const { orderId } = await req.json();
+    if (!orderId) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Order ID is required" },
+        { status: 400 }
+      );
     }
-    const photo = photoSnap.data()!;
+
+    // ── Fetch order ─────────────────────────────────────────────
+    const orderSnap = await adminDb.collection("orders").doc(orderId).get();
+    if (!orderSnap.exists) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Order not found" },
+        { status: 404 }
+      );
+    }
+    const order = orderSnap.data()!;
+
+    // Verify order belongs to user
+    if (order.buyerId !== decoded.uid) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Unauthorized" },
+        { status: 403 }
+      );
+    }
 
     const transactionUuid = generateTransactionId();
-    const amount          = photo.priceNPR as number;
-    const merchantCode    = process.env.ESEWA_MERCHANT_CODE!;
-    const secretKey       = process.env.ESEWA_SECRET_KEY!;
+    const amount = order.totalNPR as number;
+    const merchantCode = process.env.ESEWA_MERCHANT_CODE!;
+    const secretKey = process.env.ESEWA_SECRET_KEY!;
 
     // ── HMAC-SHA256 Signature (required by eSewa v2) ────────────
     const signatureInput = `total_amount=${amount},transaction_uuid=${transactionUuid},product_code=${merchantCode}`;
@@ -40,20 +61,11 @@ export async function POST(req: NextRequest) {
       .update(signatureInput)
       .digest("base64");
 
-    // ── Save pending purchase in Firestore ──────────────────────
-    const purchaseRef = adminDb.collection("purchases").doc(transactionUuid);
-    const purchase = {
-      purchaseId:     transactionUuid,
-      buyerId:        decoded.uid,
-      photoId,
-      photoTitle:     photo.title as string,
-      amountNPR:      amount,
-      paymentMethod:  "esewa" as const,
-      transactionRef: transactionUuid,
-      status:         "pending" as const,
-      purchasedAt:    admin.firestore.FieldValue.serverTimestamp(),
-    };
-    await purchaseRef.set(purchase);
+    // ── Update order with transaction reference ──────────────────
+    await adminDb.collection("orders").doc(orderId).update({
+      transactionUuid,
+      paymentStatus: "redirecting",
+    });
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL!;
 
@@ -62,67 +74,166 @@ export async function POST(req: NextRequest) {
       data: {
         paymentUrl: process.env.ESEWA_PAYMENT_URL,
         formFields: {
-          amount:               amount.toString(),
-          tax_amount:           "0",
-          total_amount:         amount.toString(),
-          transaction_uuid:     transactionUuid,
-          product_code:         merchantCode,
+          amount: amount.toString(),
+          tax_amount: "0",
+          total_amount: amount.toString(),
+          transaction_uuid: transactionUuid,
+          product_code: merchantCode,
           product_service_charge: "0",
           product_delivery_charge: "0",
-          success_url:          `${appUrl}/payment/success?tid=${transactionUuid}`,
-          failure_url:          `${appUrl}/payment/failure?tid=${transactionUuid}`,
-          signed_field_names:   "total_amount,transaction_uuid,product_code",
+          success_url: `${appUrl}/payment/success?tid=${transactionUuid}&oid=${orderId}`,
+          failure_url: `${appUrl}/payment/failure?oid=${orderId}`,
+          signed_field_names: "total_amount,transaction_uuid,product_code",
           signature,
         },
       },
     });
-
   } catch (err: unknown) {
     console.error("[/api/esewa] Error:", err);
-    return NextResponse.json<ApiResponse>({ success: false, error: (err as Error).message }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: (err as Error).message },
+      { status: 500 }
+    );
   }
 }
 
 /**
- * GET /api/esewa?tid=<transaction_uuid>
- * Verify payment status after eSewa callback.
+ * GET /api/esewa?tid=<transaction_uuid>&oid=<orderId>
+ * Verify payment status after eSewa callback, complete the order.
  */
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const tid    = searchParams.get("tid");
-    const status = searchParams.get("status"); // COMPLETE | PENDING | FAILED
+    const tid = searchParams.get("tid");
+    const oid = searchParams.get("oid");
 
-    if (!tid) return NextResponse.json<ApiResponse>({ success: false, error: "Missing tid" }, { status: 400 });
-
-    const purchaseRef  = adminDb.collection("purchases").doc(tid);
-    const purchaseSnap = await purchaseRef.get();
-    if (!purchaseSnap.exists) {
-      return NextResponse.json<ApiResponse>({ success: false, error: "Purchase not found" }, { status: 404 });
+    if (!tid || !oid) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Missing tid or oid" },
+        { status: 400 }
+      );
     }
 
-    if (status === "COMPLETE") {
-      // Verify with eSewa server-to-server
-      const verifyUrl = `${process.env.ESEWA_VERIFY_URL}?product_code=${process.env.ESEWA_MERCHANT_CODE}&transaction_uuid=${tid}&total_amount=${purchaseSnap.data()?.amountNPR}`;
-      const verifyRes = await fetch(verifyUrl);
-      const verifyData = await verifyRes.json();
+    // ── Fetch order ───────────────────────────────────────────
+    const orderRef = adminDb.collection("orders").doc(oid);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) {
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Order not found" },
+        { status: 404 }
+      );
+    }
+    const order = orderSnap.data()!;
 
-      if (verifyData.status === "COMPLETE") {
-        await purchaseRef.update({ status: "completed" });
+    // Already completed? Don't re-process
+    if (order.status === "paid") {
+      return NextResponse.json<ApiResponse>({
+        success: true,
+        message: "Payment already verified",
+        data: { orderId: oid },
+      });
+    }
 
-        // Increment salesCount on photo
-        const photoRef = adminDb.collection("photos").doc(purchaseSnap.data()?.photoId);
-        await photoRef.update({ salesCount: (await photoRef.get()).data()?.salesCount + 1 });
+    // ── Verify with eSewa server-to-server ────────────────────
+    const verifyUrl = `${process.env.ESEWA_VERIFY_URL}?product_code=${process.env.ESEWA_MERCHANT_CODE}&transaction_uuid=${tid}&total_amount=${order.totalNPR}`;
+    const verifyRes = await fetch(verifyUrl);
+    const verifyData = await verifyRes.json();
 
-        return NextResponse.json<ApiResponse>({ success: true, message: "Payment verified" });
+    if (verifyData.status !== "COMPLETE") {
+      await orderRef.update({ status: "failed", paymentStatus: "failed" });
+      return NextResponse.json<ApiResponse>(
+        { success: false, error: "Payment verification failed" },
+        { status: 400 }
+      );
+    }
+
+    // ── Payment verified — complete the order ─────────────────
+
+    // 1. Update order → paid
+    await orderRef.update({
+      status: "paid",
+      paymentStatus: "verified",
+      paidAt: admin.firestore.FieldValue.serverTimestamp(),
+      transactionRef: tid,
+    });
+
+    // 2. Create download records + update salesCount + create purchase records
+    const items = order.items || [];
+    const buyerId = order.buyerId;
+    const buyerEmail = order.buyerEmail || "";
+
+    const promises = items.map(async (item: any) => {
+      // Fetch the actual high-res imageUrl from the photo document
+      let imageUrl = "";
+      let sellerId = "";
+      let sellerName = "";
+      try {
+        const photoSnap = await adminDb
+          .collection("photos")
+          .doc(item.photoId)
+          .get();
+        if (photoSnap.exists) {
+          const photoData = photoSnap.data()!;
+          imageUrl = photoData.imageUrl || "";
+          sellerId = photoData.ownerId || "";
+          sellerName =
+            photoData.photographerName || photoData.ownerName || "";
+        }
+      } catch {
+        // Will be resolved via secure download API as fallback
       }
-    }
 
-    await purchaseRef.update({ status: "failed" });
-    return NextResponse.json<ApiResponse>({ success: false, error: "Payment verification failed" });
+      // Create download record
+      await adminDb.collection("downloads").add({
+        orderId: oid,
+        photoId: item.photoId,
+        buyerId,
+        imageUrl,
+        title: item.title,
+        thumbnailUrl: item.thumbnailUrl,
+        purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
+      // Update salesCount
+      try {
+        const photoRef = adminDb.collection("photos").doc(item.photoId);
+        const snap = await photoRef.get();
+        if (snap.exists) {
+          await photoRef.update({
+            salesCount: (snap.data()?.salesCount || 0) + 1,
+          });
+        }
+      } catch {}
+
+      // Create purchase record
+      await adminDb.collection("purchases").add({
+        buyerId,
+        buyerEmail,
+        photoId: item.photoId,
+        photoTitle: item.title,
+        sellerId,
+        sellerName,
+        amountNPR: item.priceNPR,
+        orderId: oid,
+        paymentMethod: "esewa",
+        transactionRef: tid,
+        status: "completed",
+        purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+
+    await Promise.all(promises);
+
+    return NextResponse.json<ApiResponse>({
+      success: true,
+      message: "Payment verified and order completed",
+      data: { orderId: oid },
+    });
   } catch (err: unknown) {
     console.error("[/api/esewa GET] Error:", err);
-    return NextResponse.json<ApiResponse>({ success: false, error: (err as Error).message }, { status: 500 });
+    return NextResponse.json<ApiResponse>(
+      { success: false, error: (err as Error).message },
+      { status: 500 }
+    );
   }
 }

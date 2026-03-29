@@ -141,66 +141,51 @@ export default function CheckoutPage() {
         createdAt: serverTimestamp(),
       });
 
-      /* 3. Mock payment delay */
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      /* 3. Initiate eSewa payment */
+      if (selectedPayment === "esewa") {
+        toast.loading("Redirecting to eSewa...", { id: "esewa-redirect" });
 
-      /* 4. Update order → paid */
-      await updateDoc(doc(db, "orders", orderRef.id), {
-        status: "paid",
-      });
-
-      /* 5. Create download records (with actual imageUrl) + update salesCount */
-      const downloadPromises = items.map(async (item) => {
-        // Fetch the actual high-res imageUrl from the photo document
-        let imageUrl = "";
-        try {
-          const photoSnap = await getDoc(doc(db, "photos", item.photoId));
-          if (photoSnap.exists()) {
-            imageUrl = photoSnap.data()?.imageUrl || "";
-          }
-        } catch {
-          // Will be resolved via secure download API as fallback
-        }
-        return addDoc(collection(db, "downloads"), {
-          orderId: orderRef.id,
-          photoId: item.photoId,
-          buyerId: user.uid,
-          imageUrl,
-          title: item.title,
-          thumbnailUrl: item.thumbnailUrl,
-          purchasedAt: serverTimestamp(),
+        const idToken = await user.getIdToken();
+        const esewaRes = await fetch("/api/esewa", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ orderId: orderRef.id }),
         });
-      });
 
-      const salesPromises = items.map((item) =>
-        updateDoc(doc(db, "photos", item.photoId), {
-          salesCount: increment(1),
-        }).catch(() => {})
-      );
+        const esewaData = await esewaRes.json();
 
-      // Create purchase records for admin dashboard tracking
-      const purchasePromises = items.map((item) =>
-        addDoc(collection(db, "purchases"), {
-          buyerId: user.uid,
-          buyerEmail: user.email || "",
-          photoId: item.photoId,
-          photoTitle: item.title,
-          sellerId: "", // populated from photo data
-          sellerName: item.ownerName || "",
-          amountNPR: item.priceNPR,
-          orderId: orderRef.id,
-          paymentMethod: selectedPayment,
-          status: "completed",
-          purchasedAt: serverTimestamp(),
-        })
-      );
+        if (!esewaData.success || !esewaData.data?.formFields) {
+          toast.dismiss("esewa-redirect");
+          throw new Error(esewaData.error || "Failed to initiate eSewa payment");
+        }
 
-      await Promise.all([...downloadPromises, ...salesPromises, ...purchasePromises]);
+        // Create hidden form and redirect to eSewa
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = esewaData.data.paymentUrl;
+        form.style.display = "none";
 
-      /* 6. Clear cart & redirect */
-      clearCart();
-      toast.success("Payment successful! 🎉");
-      router.push("/downloads");
+        const fields = esewaData.data.formFields;
+        for (const [key, value] of Object.entries(fields)) {
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = key;
+          input.value = String(value);
+          form.appendChild(input);
+        }
+
+        document.body.appendChild(form);
+        form.submit();
+        return; // Page will redirect to eSewa
+      }
+
+      // For other payment methods (khalti, wallet) — show coming soon
+      toast.error(`${PAYMENT_METHODS.find((m) => m.id === selectedPayment)?.name || "This payment method"} is coming soon! Please use eSewa.`);
+      // Delete the pending order
+      await updateDoc(doc(db, "orders", orderRef.id), { status: "cancelled" });
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error("Payment failed. Please try again.");
