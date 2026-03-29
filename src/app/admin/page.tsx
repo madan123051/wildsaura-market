@@ -281,6 +281,15 @@ export default function AdminDashboard() {
   const [uploadTagInput, setUploadTagInput] = useState("");
   const [uploadCategory, setUploadCategory] = useState<string>("nature");
   const [uploadPrice, setUploadPrice] = useState(100);
+  const [uploadCamera, setUploadCamera] = useState("");
+  const [uploadLens, setUploadLens] = useState("");
+  const [uploadFocalLength, setUploadFocalLength] = useState("");
+  const [uploadAperture, setUploadAperture] = useState("");
+  const [uploadShutterSpeed, setUploadShutterSpeed] = useState("");
+  const [uploadIso, setUploadIso] = useState("");
+  const [uploadLocation, setUploadLocation] = useState("");
+  const [uploadCountry, setUploadCountry] = useState("");
+  const [uploadLicenseType, setUploadLicenseType] = useState<"Standard" | "Extended" | "Editorial">("Standard");
   const [uploadStep, setUploadStep] = useState<"select" | "analyzing" | "edit" | "uploading" | "done">("select");
   const [uploadAiError, setUploadAiError] = useState("");
   const uploadFileRef = useRef<HTMLInputElement>(null);
@@ -785,6 +794,16 @@ export default function AdminDashboard() {
         aiQualityScore: 8,
         marketDemand: "Medium",
         aiRejected: false,
+        // Camera & Technical details
+        ...(uploadCamera && { camera: uploadCamera.trim() }),
+        ...(uploadLens && { lens: uploadLens.trim() }),
+        ...(uploadFocalLength && { focalLength: uploadFocalLength.trim() }),
+        ...(uploadAperture && { aperture: uploadAperture.trim() }),
+        ...(uploadShutterSpeed && { shutterSpeed: uploadShutterSpeed.trim() }),
+        ...(uploadIso && { iso: uploadIso.trim() }),
+        ...(uploadLocation && { location: uploadLocation.trim() }),
+        ...(uploadCountry && { country: uploadCountry.trim() }),
+        licenseType: uploadLicenseType,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -807,6 +826,15 @@ export default function AdminDashboard() {
     setUploadTagInput("");
     setUploadCategory("nature");
     setUploadPrice(100);
+    setUploadCamera("");
+    setUploadLens("");
+    setUploadFocalLength("");
+    setUploadAperture("");
+    setUploadShutterSpeed("");
+    setUploadIso("");
+    setUploadLocation("");
+    setUploadCountry("");
+    setUploadLicenseType("Standard");
     setUploadStep("select");
     setUploadAiError("");
     if (uploadFileRef.current) uploadFileRef.current.value = "";
@@ -3308,6 +3336,59 @@ export default function AdminDashboard() {
                         min={10}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
+                    </div>
+                  </div>
+
+                  {/* Camera & Technical Details */}
+                  <div className="border border-gray-200 rounded-xl p-4 space-y-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Camera className="w-4 h-4 text-gray-500" />
+                      <h3 className="text-sm font-semibold text-gray-700">Camera & Technical Details</h3>
+                      <span className="text-xs text-gray-400">(optional)</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Camera</label>
+                        <input type="text" value={uploadCamera} onChange={(e) => setUploadCamera(e.target.value)} placeholder="e.g. Canon EOS R5" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Lens</label>
+                        <input type="text" value={uploadLens} onChange={(e) => setUploadLens(e.target.value)} placeholder="e.g. RF 100-500mm" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Focal Length</label>
+                        <input type="text" value={uploadFocalLength} onChange={(e) => setUploadFocalLength(e.target.value)} placeholder="e.g. 200mm" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Aperture</label>
+                        <input type="text" value={uploadAperture} onChange={(e) => setUploadAperture(e.target.value)} placeholder="e.g. f/5.6" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Shutter Speed</label>
+                        <input type="text" value={uploadShutterSpeed} onChange={(e) => setUploadShutterSpeed(e.target.value)} placeholder="e.g. 1/500s" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">ISO</label>
+                        <input type="text" value={uploadIso} onChange={(e) => setUploadIso(e.target.value)} placeholder="e.g. 400" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Location</label>
+                        <input type="text" value={uploadLocation} onChange={(e) => setUploadLocation(e.target.value)} placeholder="e.g. Chitwan National Park" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Country</label>
+                        <input type="text" value={uploadCountry} onChange={(e) => setUploadCountry(e.target.value)} placeholder="e.g. Nepal" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">License Type</label>
+                      <select value={uploadLicenseType} onChange={(e) => setUploadLicenseType(e.target.value as any)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white">
+                        <option value="Standard">Standard — Commercial use, no exclusive rights</option>
+                        <option value="Extended">Extended — Full commercial rights</option>
+                        <option value="Editorial">Editorial — News/educational use only</option>
+                      </select>
                     </div>
                   </div>
 
