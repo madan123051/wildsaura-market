@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
+import { extractAndRepairJSON } from "@/lib/json-repair";
 
 // Valid PhotoCategory values that match the frontend types
 const VALID_CATEGORIES = [
@@ -76,6 +77,28 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+// Extract text from Gemini response, skipping "thinking" parts (Gemini 2.5)
+function extractTextFromGeminiResponse(geminiData: Record<string, unknown>): string {
+  const candidates = geminiData?.candidates as Array<Record<string, unknown>> | undefined;
+  const parts = (candidates?.[0] as Record<string, unknown>)?.content as Record<string, unknown> | undefined;
+  const partsArray = parts?.parts as Array<Record<string, unknown>> | undefined;
+  
+  if (!partsArray || partsArray.length === 0) return "";
+  
+  // Get non-thought text parts
+  const textParts = partsArray.filter(
+    (p) => typeof p.text === "string" && p.text.trim() && !p.thought
+  );
+  
+  if (textParts.length > 0) {
+    return textParts.map((p) => p.text as string).join("");
+  }
+  
+  // Fallback: any text part
+  const anyText = partsArray.find((p) => typeof p.text === "string" && p.text.trim());
+  return (anyText?.text as string) || "";
+}
+
 export async function POST(req: Request) {
   try {
     const { imageUrl } = await req.json();
@@ -140,18 +163,18 @@ export async function POST(req: Request) {
       {
         "is_marketable": true,
         "rejection_reason": "",
-        "title": "A descriptive 5-10 word title",
-        "description": "A brief 2-sentence explanation of the photo",
-        "tags": ["array", "of", "20", "relevant", "SEO", "keywords"],
-        "category": "ONE of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure",
+        "title": "Short 5-10 word title",
+        "description": "Brief 1-2 sentence description under 200 chars",
+        "tags": ["tag1", "tag2", "tag3"],
+        "category": "nature",
         "quality_score": 8,
         "market_demand": "High"
       }
 
-      If the image is NOT marketable, return:
+      If NOT marketable:
       {
         "is_marketable": false,
-        "rejection_reason": "Clear reason why this image is not suitable for the marketplace (1-2 sentences in English)",
+        "rejection_reason": "Reason in 1-2 short sentences",
         "title": "",
         "description": "",
         "tags": [],
@@ -160,13 +183,13 @@ export async function POST(req: Request) {
         "market_demand": "Low"
       }
 
-      IMPORTANT:
-      - is_marketable MUST be a boolean (true or false)
-      - rejection_reason should be empty string if marketable, or a clear explanation if not
-      - category MUST be exactly one of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure
-      - quality_score must be 1-10
-      - market_demand must be "High", "Medium", or "Low"
-      - Return ONLY valid JSON, no extra text
+      CRITICAL RULES:
+      - Return ONLY valid JSON, nothing else
+      - Keep ALL strings SHORT (under 200 chars each)
+      - tags array: max 20 short single-word tags
+      - category: exactly one of: nature, wildlife, landscape, street, culture, macro, aerial, underwater, adventure
+      - quality_score: integer 1-10
+      - market_demand: "High", "Medium", or "Low"
     `;
 
     // Direct REST API call
@@ -191,14 +214,14 @@ export async function POST(req: Request) {
         ],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
         },
       }),
     });
 
     if (!geminiResponse.ok) {
       const errorData = await geminiResponse.json().catch(() => ({}));
-      const errorMsg = errorData?.error?.message || `Gemini API error: ${geminiResponse.status}`;
+      const errorMsg = (errorData as Record<string, Record<string, string>>)?.error?.message || `Gemini API error: ${geminiResponse.status}`;
       console.error("Gemini API Error:", errorMsg);
       return NextResponse.json(
         { error: "AI analysis failed: " + errorMsg },
@@ -207,18 +230,23 @@ export async function POST(req: Request) {
     }
 
     const geminiData = await geminiResponse.json();
-    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    // Extract text, skipping thinking parts (Gemini 2.5 feature)
+    const text = extractTextFromGeminiResponse(geminiData as Record<string, unknown>);
 
     if (!text) {
+      console.error("Empty AI response. Raw data:", JSON.stringify(geminiData).substring(0, 500));
       return NextResponse.json(
         { error: "AI returned empty response" },
         { status: 500, headers: CORS_HEADERS }
       );
     }
 
-    // Parse the JSON response (strip markdown code blocks if any)
-    const cleanText = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
-    const parsed = JSON.parse(cleanText);
+    console.log("Raw AI text (first 300 chars):", text.substring(0, 300));
+
+    // Use robust JSON repair (handles markdown blocks, unterminated strings, etc.)
+    const repairedJSON = extractAndRepairJSON(text);
+    const parsed = JSON.parse(repairedJSON);
 
     // Normalize and validate fields
     parsed.is_marketable = parsed.is_marketable === true;
@@ -243,7 +271,7 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("AI Analysis Error:", error);
     return NextResponse.json(
-      { error: "AI Processing Failed", details: error instanceof Error ? error.message : "Unknown error" },
+      { error: "AI analysis failed: " + (error instanceof Error ? error.message : "Unknown error") },
       { status: 500, headers: CORS_HEADERS }
     );
   }

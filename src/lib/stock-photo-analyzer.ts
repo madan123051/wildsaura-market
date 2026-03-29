@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as fs from "fs";
 import { adminDb } from "@/lib/firebaseAdmin";
+import { extractAndRepairJSON } from "@/lib/json-repair";
 
 // ==============================
 // 1. GET CONFIG FROM ADMIN DASHBOARD (Firestore)
@@ -41,9 +42,24 @@ function fileToGenerativePart(path: string, mimeType: string) {
   };
 }
 
+// ==============================
+// 3. HELPER: Extract text from Gemini response (skip thinking parts)
+// ==============================
+function getResponseText(response: { response: { candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }> } }): string {
+  const parts = response.response.candidates?.[0]?.content?.parts || [];
+  // Get all non-thought text parts
+  const textParts = parts.filter((p: { text?: string; thought?: boolean }) => p.text && !p.thought);
+  if (textParts.length > 0) {
+    return textParts.map((p: { text?: string }) => p.text).join("");
+  }
+  // Fallback: any text part
+  const anyText = parts.find((p: { text?: string }) => p.text);
+  return anyText?.text || "";
+}
+
 
 // ==============================
-// 3. MAIN ANALYSIS FUNCTION
+// 4. MAIN ANALYSIS FUNCTION
 // ==============================
 export async function analyzeStockPhoto(imagePath: string) {
   try {
@@ -63,8 +79,12 @@ export async function analyzeStockPhoto(imagePath: string) {
     const deepAnalysisPrompt = `Analyze this image in extreme detail for stock photography purposes. Identify every object, texture, lighting style, composition technique (e.g., rule of thirds, macro), mood, the main subject's action, and background context. Mention any visible text, specific branding, or potential model release requirements. Describe the technical quality and resolution of the content shown.`;
 
     const analysisResult = await imageAnalyzer.generateContent([deepAnalysisPrompt, imagePart]);
-    const deepAnalysisText = analysisResult.response.text();
+    const deepAnalysisText = getResponseText(analysisResult as unknown as Parameters<typeof getResponseText>[0]);
     console.log("Deep Analysis Complete...");
+
+    if (!deepAnalysisText) {
+      throw new Error("AI returned empty analysis");
+    }
 
     // --- STEP 2: METADATA GENERATION (using Flash) ---
     const metadataPrompt = `Based on this deep analysis: '${deepAnalysisText}', generate stock photography metadata in a structured JSON format. 
@@ -77,10 +97,18 @@ Follow these strict rules:
 5. "ModelReleaseRequired": 'Yes' or 'No' based on analysis of people's faces.
 6. "PropertyReleaseRequired": 'Yes' or 'No' based on analysis of private property/branding.
 
-Output only the JSON.`;
+IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no extra text.
+Keep all string values SHORT to avoid truncation.
+Output only the JSON object.`;
 
     const metadataResult = await textGenerator.generateContent(metadataPrompt);
-    const finalMetadata = JSON.parse(metadataResult.response.text());
+    const metadataText = getResponseText(metadataResult as unknown as Parameters<typeof getResponseText>[0]);
+    
+    console.log("Raw metadata response:", metadataText.substring(0, 200));
+    
+    // Use robust JSON repair
+    const repairedJSON = extractAndRepairJSON(metadataText);
+    const finalMetadata = JSON.parse(repairedJSON);
     
     return finalMetadata;
 
