@@ -3266,7 +3266,7 @@ export default function AdminDashboard() {
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
                       >
                         {CATEGORIES.map((cat) => (
-                          <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
+                          <option key={cat.value} value={cat.value}>{cat.label}</option>
                         ))}
                       </select>
                     </div>
