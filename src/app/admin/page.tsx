@@ -722,14 +722,18 @@ export default function AdminDashboard() {
 
     // ── Auto-extract EXIF/camera data from the original file ──
     try {
-      const exifData = await exifr.parse(file, {
-        pick: [
-          "Make", "Model", "LensModel", "FocalLength",
-          "FocalLengthIn35mmFormat", "FNumber", "ExposureTime",
-          "ISO", "latitude", "longitude",
-        ],
-        silentErrors: true,
-      });
+      let exifData: any = null;
+      try {
+        exifData = await exifr.parse(file, {
+          pick: [
+            "Make", "Model", "LensModel", "FocalLength",
+            "FocalLengthIn35mmFormat", "FNumber", "ExposureTime",
+            "ISO", "latitude", "longitude",
+          ],
+        });
+      } catch (e) {
+        console.warn("EXIF extraction failed:", e);
+      }
       if (exifData) {
         if (exifData.Make && exifData.Model)
           setUploadCamera(`${exifData.Make} ${exifData.Model}`.trim());
