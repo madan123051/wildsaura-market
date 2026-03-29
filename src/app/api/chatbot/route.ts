@@ -5,11 +5,47 @@ import { adminDb } from "@/lib/firebaseAdmin";
 const VALID_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash-lite"];
 function migrateModel(model: string | undefined): string {
   if (model && VALID_MODELS.includes(model)) return model;
-  // Map deprecated models to current equivalents
   if (model === "gemini-2.0-flash" || model?.includes("2.0-flash")) return "gemini-2.5-flash";
   if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
   if (model?.includes("1.5-flash")) return "gemini-2.5-flash";
   return "gemini-2.5-flash";
+}
+
+/**
+ * Extract text from Gemini response — handles both regular and "thinking" model responses.
+ * Gemini 2.5 models may return [{thought: true, text: "..."}, {text: "actual answer"}]
+ * We want the LAST non-thought text part.
+ */
+function extractTextFromGeminiResponse(geminiData: Record<string, unknown>): string | null {
+  try {
+    const candidate = (geminiData?.candidates as Array<Record<string, unknown>>)?.[0];
+    if (!candidate) return null;
+
+    // Check if blocked by safety
+    if (candidate.finishReason === "SAFETY" || candidate.finishReason === "BLOCKED") {
+      return "I'm sorry, I can't respond to that. Please try a different question.";
+    }
+
+    const parts = (candidate.content as Record<string, unknown>)?.parts as Array<Record<string, unknown>>;
+    if (!parts || parts.length === 0) return null;
+
+    // Find the last non-thought text part (Gemini 2.5 thinking models)
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (part.text && !part.thought) {
+        return part.text as string;
+      }
+    }
+
+    // Fallback: just get any text part
+    for (const part of parts) {
+      if (part.text) return part.text as string;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // Get chatbot AI config from Firestore (with env fallback)
@@ -37,7 +73,6 @@ async function getChatbotConfig(): Promise<{
   } catch (e) {
     console.warn("Could not load chatbot config from Firestore, using env fallback:", e);
   }
-  // Fallback: use GEMINI_API_KEY env var if Firestore is unavailable
   return {
     apiKey: process.env.GEMINI_API_KEY || "",
     model: "gemini-2.5-flash",
@@ -131,8 +166,8 @@ IMPORTANT RULES:
 
     if (!geminiResponse.ok) {
       const errorData = await geminiResponse.json().catch(() => ({}));
-      const errorMsg = errorData?.error?.message || `Gemini API error: ${geminiResponse.status}`;
-      console.error("Chatbot Gemini API Error:", errorMsg);
+      const errorMsg = (errorData as Record<string, Record<string, string>>)?.error?.message || `Gemini API error: ${geminiResponse.status}`;
+      console.error("Chatbot Gemini API Error:", errorMsg, "Model:", config.model);
       return NextResponse.json(
         { error: "Chatbot failed to respond", details: errorMsg },
         { status: 500 }
@@ -140,11 +175,18 @@ IMPORTANT RULES:
     }
 
     const geminiData = await geminiResponse.json();
-    const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = extractTextFromGeminiResponse(geminiData as Record<string, unknown>);
 
     if (!text) {
+      // Log the full response for debugging
+      console.error("Chatbot: Empty response from Gemini.", "Model:", config.model, "Response structure:", JSON.stringify({
+        hasCandidates: !!(geminiData as Record<string, unknown>)?.candidates,
+        candidateCount: ((geminiData as Record<string, unknown>)?.candidates as unknown[])?.length ?? 0,
+        finishReason: ((geminiData as Record<string, unknown>)?.candidates as Record<string, unknown>[])?.[0]?.finishReason,
+        partsCount: (((geminiData as Record<string, unknown>)?.candidates as Record<string, unknown>[])?.[0]?.content as Record<string, unknown>)?.parts ? ((((geminiData as Record<string, unknown>)?.candidates as Record<string, unknown>[])?.[0]?.content as Record<string, unknown>)?.parts as unknown[])?.length : 0,
+      }));
       return NextResponse.json(
-        { error: "AI returned empty response" },
+        { error: "AI returned empty response", debug: { model: config.model, finishReason: ((geminiData as Record<string, unknown>)?.candidates as Record<string, unknown>[])?.[0]?.finishReason || "unknown" } },
         { status: 500 }
       );
     }
