@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebaseAdmin";
 
 // Helper: Get chatbot AI config from Firestore
+// Auto-migrate old model names
+const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+function migrateModel(model: string | undefined): string {
+  if (model && VALID_MODELS.includes(model)) return model;
+  if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
+  return "gemini-2.0-flash";
+}
+
 async function getChatbotConfig(): Promise<{
   apiKey: string;
   model: string;
@@ -16,7 +24,7 @@ async function getChatbotConfig(): Promise<{
       if (data?.chatbot) {
         return {
           apiKey: data.chatbot.apiKey || "",
-          model: data.chatbot.model || "gemini-2.0-flash",
+          model: migrateModel(data.chatbot.model),
           systemPrompt:
             data.chatbot.systemPrompt ||
             "You are WildSaura Market assistant. Help users find photos, understand pricing, and navigate the marketplace. Be friendly and concise.",

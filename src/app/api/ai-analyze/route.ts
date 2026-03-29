@@ -40,6 +40,14 @@ function normalizeCategory(raw: string): string {
 }
 
 // Helper: Get AI API key from Firestore settings (fallback to env)
+// Auto-migrate old model names to valid current ones
+const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+function migrateModel(model: string | undefined): string {
+  if (model && VALID_MODELS.includes(model)) return model;
+  if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
+  return "gemini-2.0-flash";
+}
+
 async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string }> {
   try {
     const snap = await adminDb.collection("settings").doc("ai-config").get();
@@ -48,7 +56,7 @@ async function getPhotoAnalysisConfig(): Promise<{ apiKey: string; model: string
       if (data?.photoAnalysis?.apiKey && data.photoAnalysis.enabled) {
         return {
           apiKey: data.photoAnalysis.apiKey,
-          model: data.photoAnalysis.model || "gemini-2.0-flash",
+          model: migrateModel(data.photoAnalysis.model),
         };
       }
     }
