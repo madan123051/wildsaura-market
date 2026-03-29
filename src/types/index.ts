@@ -62,6 +62,33 @@ export interface StockPhoto {
   fileSize?: number;
   createdAt: Date;
   updatedAt?: Date;
+
+  // Photographer extended
+  portfolioUrl?: string;
+  copyrightNotice?: string;
+
+  // Location
+  location?: string;
+  country?: string;
+  gpsCoordinates?: { lat: number; lng: number } | null;
+
+  // Camera & Technical
+  camera?: string;
+  lens?: string;
+  focalLength?: string;
+  aperture?: string;
+  shutterSpeed?: string;
+  iso?: string;
+  dateTaken?: string;
+  whiteBalance?: string;
+  colorSpace?: string;
+  software?: string;
+
+  // Licensing
+  licenseType?: string;
+  modelRelease?: string;
+  propertyRelease?: string;
+  usageNotes?: string;
 }
 
 // ─── Cart ─────────────────────────────────────────────

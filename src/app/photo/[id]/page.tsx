@@ -19,6 +19,18 @@ import {
   ChevronRight,
   Heart,
   ExternalLink,
+  MapPin,
+  Aperture,
+  Shield,
+  Globe,
+  Calendar,
+  Cpu,
+  Palette,
+  Focus,
+  Timer,
+  Settings,
+  FileText,
+  Target,
 } from "lucide-react";
 import {
   doc,
@@ -54,6 +66,12 @@ function saveCart(items: CartItem[]) {
 
 function isInCart(photoId: string): boolean {
   return getCartItems().some((i) => i.photoId === photoId);
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /* ─────────────────── quality stars ──────────────────── */
@@ -379,6 +397,36 @@ export default function PhotoDetailPage() {
   const categoryLabel =
     photo.category.charAt(0).toUpperCase() + photo.category.slice(1);
 
+  /* ── helpers for conditional sections ── */
+  const hasTechnicalData = !!(
+    photo.camera ||
+    photo.lens ||
+    photo.focalLength ||
+    photo.aperture ||
+    photo.shutterSpeed ||
+    photo.iso ||
+    photo.dateTaken ||
+    photo.whiteBalance ||
+    photo.colorSpace ||
+    photo.software ||
+    (photo.width && photo.height) ||
+    photo.fileSize
+  );
+
+  const hasLocationData = !!(
+    photo.location ||
+    photo.country ||
+    photo.gpsCoordinates
+  );
+
+  const hasLicensingData = !!(
+    photo.licenseType ||
+    photo.modelRelease ||
+    photo.propertyRelease ||
+    photo.copyrightNotice ||
+    photo.usageNotes
+  );
+
   return (
     <div className="min-h-screen bg-brand-light">
       <Toaster position="top-right" />
@@ -637,16 +685,271 @@ export default function PhotoDetailPage() {
                 {photo.photographerName || photo.ownerName || "Unknown Photographer"}
               </p>
               <p className="text-sm text-gray-500">Wildlife & Nature Photographer</p>
+              {photo.copyrightNotice && (
+                <p className="mt-1 text-xs text-gray-400">© {photo.copyrightNotice}</p>
+              )}
             </div>
-            <Link
-              href={`/photographer/${photo.ownerId}`}
-              className="inline-flex items-center gap-2 rounded-xl border border-brand-primary bg-brand-primary/5 px-5 py-2.5 text-sm font-semibold text-brand-primary transition hover:bg-brand-primary/10"
-            >
-              View Portfolio
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Link>
+            <div className="flex items-center gap-2">
+              {photo.portfolioUrl && (
+                <a
+                  href={photo.portfolioUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-gray-300 hover:bg-gray-50"
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Website
+                </a>
+              )}
+              <Link
+                href={`/photographer/${photo.ownerId}`}
+                className="inline-flex items-center gap-2 rounded-xl border border-brand-primary bg-brand-primary/5 px-5 py-2.5 text-sm font-semibold text-brand-primary transition hover:bg-brand-primary/10"
+              >
+                View Portfolio
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
           </div>
         </div>
+
+        {/* ═══════════ camera & technical data ═══════════ */}
+        {hasTechnicalData && (
+          <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-card sm:p-8">
+            <h2 className="mb-6 flex items-center gap-2 font-heading text-xl font-bold text-brand-dark">
+              <Camera className="h-5 w-5 text-brand-primary" />
+              Camera & Technical Data
+            </h2>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {photo.camera && (
+                <div className="flex items-start gap-3">
+                  <Camera className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Camera</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.camera}</p>
+                  </div>
+                </div>
+              )}
+              {photo.lens && (
+                <div className="flex items-start gap-3">
+                  <Focus className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Lens</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.lens}</p>
+                  </div>
+                </div>
+              )}
+              {photo.focalLength && (
+                <div className="flex items-start gap-3">
+                  <Target className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Focal Length</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.focalLength}</p>
+                  </div>
+                </div>
+              )}
+              {photo.aperture && (
+                <div className="flex items-start gap-3">
+                  <Aperture className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Aperture</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.aperture}</p>
+                  </div>
+                </div>
+              )}
+              {photo.shutterSpeed && (
+                <div className="flex items-start gap-3">
+                  <Timer className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Shutter Speed</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.shutterSpeed}</p>
+                  </div>
+                </div>
+              )}
+              {photo.iso && (
+                <div className="flex items-start gap-3">
+                  <Settings className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">ISO</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.iso}</p>
+                  </div>
+                </div>
+              )}
+              {photo.dateTaken && (
+                <div className="flex items-start gap-3">
+                  <Calendar className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Date Taken</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.dateTaken}</p>
+                  </div>
+                </div>
+              )}
+              {photo.whiteBalance && (
+                <div className="flex items-start gap-3">
+                  <Palette className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">White Balance</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.whiteBalance}</p>
+                  </div>
+                </div>
+              )}
+              {photo.colorSpace && (
+                <div className="flex items-start gap-3">
+                  <Cpu className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Color Space</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.colorSpace}</p>
+                  </div>
+                </div>
+              )}
+              {photo.software && (
+                <div className="flex items-start gap-3">
+                  <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Software</p>
+                    <p className="text-sm font-medium text-brand-dark">{photo.software}</p>
+                  </div>
+                </div>
+              )}
+              {photo.width && photo.height && (
+                <div className="flex items-start gap-3">
+                  <Eye className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">Dimensions</p>
+                    <p className="text-sm font-medium text-brand-dark">
+                      {photo.width} × {photo.height}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {photo.fileSize && (
+                <div className="flex items-start gap-3">
+                  <Download className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-xs font-medium text-gray-400">File Size</p>
+                    <p className="text-sm font-medium text-brand-dark">
+                      {formatFileSize(photo.fileSize)}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ location ═══════════ */}
+        {hasLocationData && (
+          <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-card sm:p-8">
+            <h2 className="mb-6 flex items-center gap-2 font-heading text-xl font-bold text-brand-dark">
+              <MapPin className="h-5 w-5 text-brand-primary" />
+              Location
+            </h2>
+            <div className="space-y-3">
+              {photo.location && (
+                <div className="flex items-center gap-3">
+                  <MapPin className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <p className="text-sm font-medium text-brand-dark">{photo.location}</p>
+                </div>
+              )}
+              {photo.country && (
+                <div className="flex items-center gap-3">
+                  <Globe className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <p className="text-sm font-medium text-brand-dark">{photo.country}</p>
+                </div>
+              )}
+              {photo.gpsCoordinates && (
+                <p className="ml-7 text-xs text-gray-400">
+                  GPS: {photo.gpsCoordinates.lat.toFixed(6)}, {photo.gpsCoordinates.lng.toFixed(6)}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════ licensing & rights ═══════════ */}
+        {hasLicensingData && (
+          <div className="mt-8 rounded-2xl border border-gray-100 bg-white p-6 shadow-card sm:p-8">
+            <h2 className="mb-6 flex items-center gap-2 font-heading text-xl font-bold text-brand-dark">
+              <Shield className="h-5 w-5 text-brand-primary" />
+              Licensing & Rights
+            </h2>
+            <div className="space-y-4">
+              {photo.licenseType && (
+                <div className="flex items-center gap-3">
+                  <Shield className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <span className="text-sm text-gray-500">License Type:</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                      photo.licenseType === "Standard"
+                        ? "bg-green-100 text-green-700"
+                        : photo.licenseType === "Extended"
+                          ? "bg-blue-100 text-blue-700"
+                          : photo.licenseType === "Editorial"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-gray-100 text-gray-600"
+                    )}
+                  >
+                    {photo.licenseType}
+                  </span>
+                </div>
+              )}
+              {photo.modelRelease && (
+                <div className="flex items-center gap-3">
+                  <FileText className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <span className="text-sm text-gray-500">Model Release:</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                      photo.modelRelease === "Yes"
+                        ? "bg-green-100 text-green-700"
+                        : photo.modelRelease === "No"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-600"
+                    )}
+                  >
+                    {photo.modelRelease}
+                  </span>
+                </div>
+              )}
+              {photo.propertyRelease && (
+                <div className="flex items-center gap-3">
+                  <FileText className="h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <span className="text-sm text-gray-500">Property Release:</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                      photo.propertyRelease === "Yes"
+                        ? "bg-green-100 text-green-700"
+                        : photo.propertyRelease === "No"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-600"
+                    )}
+                  >
+                    {photo.propertyRelease}
+                  </span>
+                </div>
+              )}
+              {photo.copyrightNotice && (
+                <div className="flex items-start gap-3">
+                  <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-500">Copyright Notice</p>
+                    <p className="text-sm font-medium text-brand-dark">© {photo.copyrightNotice}</p>
+                  </div>
+                </div>
+              )}
+              {photo.usageNotes && (
+                <div className="flex items-start gap-3">
+                  <FileText className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-500">Usage Notes</p>
+                    <p className="text-sm leading-relaxed text-gray-600">{photo.usageNotes}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ═══════════ related photos ═══════════ */}
         {related.length > 0 && (
