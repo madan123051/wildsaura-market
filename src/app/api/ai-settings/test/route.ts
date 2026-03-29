@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebaseAdmin";
 
@@ -16,6 +15,7 @@ const VALID_MODELS = [
 
 export async function POST(req: Request) {
   try {
+    // Verify admin
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ valid: false, error: "Unauthorized" }, { status: 401 });
@@ -34,54 +34,65 @@ export async function POST(req: Request) {
 
     // Clean and validate model name
     const cleanModel = (model || "gemini-2.0-flash").trim().toLowerCase();
-    
+
     if (!VALID_MODELS.includes(cleanModel)) {
-      return NextResponse.json({ 
-        valid: false, 
-        error: `Invalid model: "${cleanModel}". Use one of: ${VALID_MODELS.join(", ")}` 
+      return NextResponse.json({
+        valid: false,
+        error: `Invalid model: "${cleanModel}". Use one of: ${VALID_MODELS.join(", ")}`,
       });
     }
 
-    // Test the API key by making a simple generation call
-    const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const genModel = genAI.getGenerativeModel({ model: cleanModel });
+    // Use DIRECT REST API call — bypasses SDK version issues completely
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey.trim()}`;
 
-    const result = await genModel.generateContent("Say hi in one word.");
-    const text = result.response.text();
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: "Say hello in one word." }],
+          },
+        ],
+      }),
+    });
 
-    if (text) {
-      return NextResponse.json({ valid: true, message: `✅ Working! Model: ${cleanModel}` });
-    } else {
-      return NextResponse.json({ valid: false, error: "No response from model" });
+    if (response.ok) {
+      const data = await response.json();
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (text) {
+        return NextResponse.json({ valid: true, message: `✅ Working! Model: ${cleanModel}` });
+      }
+      return NextResponse.json({ valid: true, message: `✅ API key is valid! (Model: ${cleanModel})` });
     }
-  } catch (error: unknown) {
-    console.error("API Key Test Error:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
-    // Parse common Gemini API errors for user-friendly messages
-    if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("API key not valid")) {
+
+    // Handle error responses
+    const errorData = await response.json().catch(() => null);
+    const errorMsg = errorData?.error?.message || `HTTP ${response.status}`;
+    const errorStatus = errorData?.error?.status || "";
+
+    if (response.status === 400 && errorMsg.includes("API_KEY_INVALID")) {
       return NextResponse.json({ valid: false, error: "❌ API key is invalid. Get a new key from aistudio.google.com/apikey" });
     }
-    if (errorMessage.includes("PERMISSION_DENIED") || errorMessage.includes("403")) {
+    if (response.status === 403) {
       return NextResponse.json({ valid: false, error: "❌ Permission denied. Enable 'Generative Language API' in Google Cloud Console." });
     }
-    if (errorMessage.includes("models/") && errorMessage.includes("not found")) {
-      return NextResponse.json({ valid: false, error: "❌ Model not found. Make sure 'Generative Language API' is enabled in your Google Cloud project." });
+    if (response.status === 404) {
+      return NextResponse.json({ valid: false, error: `❌ Model '${cleanModel}' not found. Try 'gemini-2.0-flash'.` });
     }
-    if (errorMessage.includes("NOT_FOUND") || errorMessage.includes("404")) {
-      return NextResponse.json({ valid: false, error: "❌ API not reachable. Please enable 'Generative Language API' in Google Cloud Console for your project." });
-    }
-    if (errorMessage.includes("QUOTA") || errorMessage.includes("429") || errorMessage.includes("Resource has been exhausted")) {
-      return NextResponse.json({ valid: true, message: "✅ API key is valid! (Rate limit hit, but key works)" });
-    }
-    if (errorMessage.includes("SAFETY")) {
-      return NextResponse.json({ valid: true, message: "✅ API key is valid! (Safety filter triggered, but key works)" });
-    }
-    if (errorMessage.includes("fetch failed") || errorMessage.includes("ECONNREFUSED")) {
-      return NextResponse.json({ valid: false, error: "❌ Network error. Could not reach Google API servers." });
+    if (response.status === 429) {
+      return NextResponse.json({ valid: true, message: "✅ API key is valid! (Rate limit reached, but key works)" });
     }
 
-    // Return the actual error for debugging
-    return NextResponse.json({ valid: false, error: `❌ Error: ${errorMessage.substring(0, 200)}` });
+    return NextResponse.json({ valid: false, error: `❌ Error: ${errorMsg} (${errorStatus || response.status})` });
+  } catch (error: unknown) {
+    console.error("API Key Test Error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+
+    if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED")) {
+      return NextResponse.json({ valid: false, error: "❌ Network error. Could not reach Google API." });
+    }
+
+    return NextResponse.json({ valid: false, error: `❌ Error: ${msg.substring(0, 200)}` });
   }
 }
