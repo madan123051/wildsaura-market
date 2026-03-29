@@ -275,7 +275,55 @@ export default function PhotoDetailPage() {
           return;
         }
         const { imageUrl: _hiRes, ...safeData } = snap.data();
-        const data = { id: snap.id, ...safeData } as StockPhoto;
+
+        // ── Normalize fields from Lumina's format to Market's format ──
+        const raw: Record<string, any> = { ...safeData };
+
+        // Location: Lumina writes `locationName`, Market reads `location`
+        if (!raw.location && raw.locationName) {
+          raw.location = raw.locationName;
+        }
+
+        // GPS: Lumina writes separate lat/lng, Market reads gpsCoordinates object
+        if (
+          !raw.gpsCoordinates &&
+          raw.gpsLatitude != null &&
+          raw.gpsLongitude != null
+        ) {
+          raw.gpsCoordinates = {
+            lat: Number(raw.gpsLatitude),
+            lng: Number(raw.gpsLongitude),
+          };
+        }
+
+        // Quality score: Lumina writes `aiQualityScore`, Market reads `qualityScore`
+        if (raw.qualityScore == null && raw.aiQualityScore != null) {
+          raw.qualityScore = raw.aiQualityScore;
+        }
+
+        // Model/Property release: Lumina writes boolean, Market reads string
+        if (typeof raw.modelRelease === "boolean") {
+          raw.modelRelease = raw.modelRelease ? "Yes" : "No";
+        }
+        if (typeof raw.propertyRelease === "boolean") {
+          raw.propertyRelease = raw.propertyRelease ? "Yes" : "No";
+        }
+
+        // File size: Lumina might write `fileSizeMB`, Market reads `fileSize` (bytes)
+        if (raw.fileSize == null && raw.fileSizeMB != null) {
+          raw.fileSize = Math.round(Number(raw.fileSizeMB) * 1024 * 1024);
+        }
+
+        // Resolution: Lumina might write "WxH" string, Market reads width/height
+        if (raw.width == null && raw.resolution) {
+          const parts = String(raw.resolution).split(/[x×]/i);
+          if (parts.length === 2) {
+            raw.width = parseInt(parts[0], 10) || undefined;
+            raw.height = parseInt(parts[1], 10) || undefined;
+          }
+        }
+
+        const data = { id: snap.id, ...raw } as StockPhoto;
         if (data.status !== "approved" && data.status !== ("active" as any)) {
           if (!cancelled) setNotFound(true);
           return;
