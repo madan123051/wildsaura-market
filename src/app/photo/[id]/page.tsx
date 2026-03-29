@@ -323,6 +323,11 @@ export default function PhotoDetailPage() {
           }
         }
 
+        // License type: Lumina writes lowercase ("standard"), Market expects capitalized ("Standard")
+        if (raw.licenseType && typeof raw.licenseType === "string") {
+          raw.licenseType = raw.licenseType.charAt(0).toUpperCase() + raw.licenseType.slice(1);
+        }
+
         const data = { id: snap.id, ...raw } as StockPhoto;
         if (data.status !== "approved" && data.status !== ("active" as any)) {
           if (!cancelled) setNotFound(true);
