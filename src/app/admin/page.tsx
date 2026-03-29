@@ -579,6 +579,27 @@ export default function AdminDashboard() {
     }
   };
 
+  // Auto-migrate old/invalid model names to valid ones
+  const VALID_MODELS = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.0-flash-lite"];
+  const migrateModel = (model: string | undefined): string => {
+    if (model && VALID_MODELS.includes(model)) return model;
+    // Map old models to new ones
+    if (model?.includes("1.5-pro") || model?.includes("2.5-pro")) return "gemini-2.5-pro";
+    return "gemini-2.0-flash"; // default for any invalid/old model
+  };
+
+  const migrateSettings = (data: AISettings): AISettings => {
+    const migrate = (service: AIServiceConfig | undefined) =>
+      service ? { ...service, model: migrateModel(service.model) } : service;
+    return {
+      ...data,
+      photoAnalysis: migrate(data.photoAnalysis) as AIServiceConfig,
+      chatbot: migrate(data.chatbot) as AIServiceConfig,
+      contentModeration: migrate(data.contentModeration) as AIServiceConfig,
+      seoOptimization: migrate(data.seoOptimization) as AIServiceConfig,
+    };
+  };
+
   const fetchAISettings = useCallback(async () => {
     if (!firebaseUser) return;
     setAiSettingsLoading(true);
@@ -586,7 +607,7 @@ export default function AdminDashboard() {
       const docRef = doc(db, "settings", "ai-config");
       const snap = await getDoc(docRef);
       if (snap.exists()) {
-        setAiSettings(snap.data() as AISettings);
+        setAiSettings(migrateSettings(snap.data() as AISettings));
       } else {
         // Set defaults
         setAiSettings({
