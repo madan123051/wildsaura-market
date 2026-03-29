@@ -23,6 +23,7 @@ import { ref as refStorage, uploadBytes, getDownloadURL } from "firebase/storage
 import { StockPhoto, UserProfile, PhotoCategory, CATEGORIES } from "@/types";
 import Image from "next/image";
 import toast, { Toaster } from "react-hot-toast";
+import exifr from "exifr";
 import {
   Shield,
   Camera,
@@ -289,6 +290,7 @@ export default function AdminDashboard() {
   const [uploadIso, setUploadIso] = useState("");
   const [uploadLocation, setUploadLocation] = useState("");
   const [uploadCountry, setUploadCountry] = useState("");
+  const [uploadPhotographerName, setUploadPhotographerName] = useState("");
   const [uploadLicenseType, setUploadLicenseType] = useState<"Standard" | "Extended" | "Editorial">("Standard");
   const [uploadStep, setUploadStep] = useState<"select" | "analyzing" | "edit" | "uploading" | "done">("select");
   const [uploadAiError, setUploadAiError] = useState("");
@@ -709,7 +711,7 @@ export default function AdminDashboard() {
   }, [isAdmin, activeTab, fetchAISettings]);
 
   // ─── Admin Upload Handlers ──────────────────────────────────────────────────
-  const handleAdminFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAdminFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
@@ -717,6 +719,51 @@ export default function AdminDashboard() {
     setUploadFile(file);
     setUploadPreview(URL.createObjectURL(file));
     setUploadStep("analyzing");
+
+    // ── Auto-extract EXIF/camera data from the original file ──
+    try {
+      const exifData = await exifr.parse(file, {
+        pick: [
+          "Make", "Model", "LensModel", "FocalLength",
+          "FocalLengthIn35mmFormat", "FNumber", "ExposureTime",
+          "ISO", "latitude", "longitude",
+        ],
+        silentErrors: true,
+      });
+      if (exifData) {
+        if (exifData.Make && exifData.Model)
+          setUploadCamera(`${exifData.Make} ${exifData.Model}`.trim());
+        else if (exifData.Model) setUploadCamera(exifData.Model);
+        if (exifData.LensModel) setUploadLens(exifData.LensModel);
+        if (exifData.FocalLength) {
+          const fl35 = exifData.FocalLengthIn35mmFormat;
+          setUploadFocalLength(
+            fl35 && fl35 !== exifData.FocalLength
+              ? `${exifData.FocalLength}mm (${fl35}mm equiv.)`
+              : `${exifData.FocalLength}mm`
+          );
+        }
+        if (exifData.FNumber) setUploadAperture(`f/${exifData.FNumber}`);
+        if (exifData.ExposureTime) {
+          setUploadShutterSpeed(
+            exifData.ExposureTime >= 1
+              ? `${exifData.ExposureTime}s`
+              : `1/${Math.round(1 / exifData.ExposureTime)}s`
+          );
+        }
+        if (exifData.ISO) setUploadIso(String(exifData.ISO));
+        if (exifData.latitude && exifData.longitude) {
+          // Reverse geocode could be added later
+          setUploadLocation(`${exifData.latitude.toFixed(4)}, ${exifData.longitude.toFixed(4)}`);
+        }
+        if (exifData.Make || exifData.Model || exifData.LensModel) {
+          toast.success("📷 Camera details auto-detected from EXIF!");
+        }
+      }
+    } catch (exifErr) {
+      console.warn("EXIF extraction failed:", exifErr);
+    }
+
     adminUploadAndAnalyze(file);
   };
 
@@ -776,7 +823,8 @@ export default function AdminDashboard() {
     try {
       await addDoc(collection(db, "photos"), {
         ownerId: firebaseUser.uid,
-        ownerName: firebaseUser.displayName || firebaseUser.email || "Admin",
+        ownerName: uploadPhotographerName.trim() || firebaseUser.displayName || firebaseUser.email || "Admin",
+        photographerName: uploadPhotographerName.trim() || firebaseUser.displayName || firebaseUser.email || "Admin",
         ownerAvatar: firebaseUser.photoURL || "",
         imageUrl: uploadImageUrl,
         thumbnailUrl: uploadImageUrl,
@@ -826,6 +874,7 @@ export default function AdminDashboard() {
     setUploadTagInput("");
     setUploadCategory("nature");
     setUploadPrice(100);
+    setUploadPhotographerName("");
     setUploadCamera("");
     setUploadLens("");
     setUploadFocalLength("");
@@ -3259,6 +3308,16 @@ export default function AdminDashboard() {
                           {uploadAiError}
                         </div>
                       )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">📸 Photographer Name</label>
+                        <input
+                          type="text"
+                          value={uploadPhotographerName}
+                          onChange={(e) => setUploadPhotographerName(e.target.value)}
+                          placeholder="Photographer name (shown on listing)"
+                          className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        />
+                      </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                         <input
