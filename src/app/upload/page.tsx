@@ -660,6 +660,9 @@ export default function UploadPage() {
 
     try {
       await addDoc(collection(db, "photos"), {
+        // App source identifier (shared DB with WildSaura portfolio)
+        source: "market",
+
         // Owner info
         ownerId: user.uid,
         ownerName: profile?.displayName || user.displayName || "Unknown",
