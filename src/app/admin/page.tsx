@@ -325,10 +325,12 @@ export default function AdminDashboard() {
       // Fetch all photos and filter client-side to avoid composite index requirement
       const allQuery = query(collection(db, "photos"), orderBy("createdAt", "desc"));
       const allSnap = await getDocs(allQuery);
+      // Exclude WildSaura portfolio photos — only show marketplace photos (source !== "wildsaura")
+      const marketDocs = allSnap.docs.filter((d) => d.data().source !== "wildsaura");
       const snap = {
         docs: photoFilter === "all"
-          ? allSnap.docs
-          : allSnap.docs.filter((d) => d.data().status === photoFilter),
+          ? marketDocs
+          : marketDocs.filter((d) => d.data().status === photoFilter),
       };
       const results: StockPhoto[] = snap.docs.map((d) => ({
         id: d.id,
@@ -826,6 +828,7 @@ export default function AdminDashboard() {
     setUploadStep("uploading");
     try {
       await addDoc(collection(db, "photos"), {
+        source: "market",  // Tag as marketplace photo (shared DB with WildSaura)
         ownerId: firebaseUser.uid,
         ownerName: uploadPhotographerName.trim() || firebaseUser.displayName || firebaseUser.email || "Admin",
         photographerName: uploadPhotographerName.trim() || firebaseUser.displayName || firebaseUser.email || "Admin",
