@@ -432,7 +432,6 @@ export default function PhotoDetailPage() {
             Photo Not Found
           </h1>
           <p className="mt-2 text-gray-500">
-            This photo doesn’t exist or is no longer available.
           </p>
           <Link
             href="/explore"
