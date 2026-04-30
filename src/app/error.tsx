@@ -28,7 +28,7 @@ export default function GlobalError({
         Something Went Wrong
       </h1>
       <p className="text-gray-500 max-w-md mb-8">
-        An unexpected error occurred. Don&apos;t worry, your data is safe.
+        An unexpected error occurred. Don’t worry, your data is safe.
         Try refreshing the page.
       </p>
 
