@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { MessageCircle, X, Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 
 interface ChatMessage {
@@ -15,6 +15,9 @@ export default function MarketChatbot() {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Keep a ref to latest messages for use inside async callbacks
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -26,11 +29,15 @@ export default function MarketChatbot() {
     }
   }, [isOpen]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+  // Core send function — accepts an optional direct message
+  // so quick-suggestion buttons work without depending on React state timing
+  const sendMessage = useCallback(async (directMsg?: string) => {
+    const userMsg = directMsg !== undefined ? directMsg.trim() : input.trim();
+    if (!userMsg || loading) return;
 
-    const userMsg = input.trim();
-    setInput("");
+    // Clear the text input only when it was used (not a direct message)
+    if (directMsg === undefined) setInput("");
+
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
     setLoading(true);
 
@@ -40,7 +47,7 @@ export default function MarketChatbot() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsg,
-          history: messages.slice(-10), // Last 10 messages for context
+          history: messagesRef.current.slice(-10), // Last 10 messages for context
         }),
       });
 
@@ -71,7 +78,7 @@ export default function MarketChatbot() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [input, loading]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -133,10 +140,7 @@ export default function MarketChatbot() {
                     (q) => (
                       <button
                         key={q}
-                        onClick={() => {
-                          setInput(q);
-                          setTimeout(sendMessage, 100);
-                        }}
+                        onClick={() => sendMessage(q)}
                         className="px-3 py-1.5 bg-white border border-emerald-200 text-emerald-700 text-xs rounded-full hover:bg-emerald-50 transition-colors"
                       >
                         {q}
@@ -206,7 +210,7 @@ export default function MarketChatbot() {
                 disabled={loading}
               />
               <button
-                onClick={sendMessage}
+                onClick={() => sendMessage()}
                 disabled={!input.trim() || loading}
                 className="w-10 h-10 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-xl flex items-center justify-center transition-colors"
               >
