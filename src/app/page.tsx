@@ -249,8 +249,7 @@ export default function HomePage() {
 
       allSnap.forEach((d) => {
         const raw = d.data();
-        const { imageUrl: _hiRes, ...safeData } = raw;
-        const photo = { ...safeData, id: d.id } as StockPhoto;
+        const photo = { ...raw, id: d.id } as StockPhoto;
         
         // Count ALL photos for stats (makes marketplace look active)
         allPhotos.push(photo);
