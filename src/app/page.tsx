@@ -131,14 +131,14 @@ function FeaturedPhotoCard({ photo }: { photo: StockPhoto }) {
           {/* Hover Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
             <h3 className="text-white font-semibold text-sm line-clamp-1">
-              {photo.title}
+              {photo.title || "Untitled"}
             </h3>
             <div className="flex items-center justify-between mt-1.5">
               <span className="text-white/80 text-xs">
                 by {photo.ownerName || "Photographer"}
               </span>
               <span className="bg-brand-secondary text-brand-dark text-xs font-bold px-2.5 py-1 rounded-full">
-                {formatNPR(photo.priceNPR)}
+                {formatNPR(photo.priceNPR || 0)}
               </span>
             </div>
           </div>
@@ -249,6 +249,12 @@ export default function HomePage() {
 
       allSnap.forEach((d) => {
         const raw = d.data();
+        
+        // Skip photos missing required display fields
+        if (!raw.imageUrl || !raw.thumbnailUrl || !raw.title) {
+          return;
+        }
+        
         const photo = { ...raw, id: d.id } as StockPhoto;
         
         // Count ALL photos for stats (makes marketplace look active)
@@ -393,7 +399,7 @@ export default function HomePage() {
             icon={<Grid3X3 className="h-6 w-6" />}
           />
           <AnimatedCounter
-            target={featuredPhotos.reduce((sum, p) => sum + (p.salesCount || 0), 0)}
+            target={Math.max(0, featuredPhotos.reduce((sum, p) => sum + (p.salesCount || 0), 0))}
             label="Photos Sold"
             icon={<TrendingUp className="h-6 w-6" />}
           />
