@@ -242,7 +242,7 @@ export default function HomePage() {
       // Fetch ALL photos without orderBy — avoids any index issues
       const allSnap = await getDocs(photosRef);
 
-      const allPhotos: StockPhoto[] = [];
+      const listedPhotos: StockPhoto[] = [];
       const approvedPhotos: StockPhoto[] = [];
       const ownerIds = new Set<string>();
       const counts: Record<string, number> = {};
@@ -254,14 +254,21 @@ export default function HomePage() {
         if (!raw.imageUrl || !raw.thumbnailUrl || !raw.title) {
           return;
         }
+
+        // Only count photos that are priced for sale (priceNPR > 0)
+        // This excludes portfolio photos from Drishya or other sources
+        // that share the same Firebase database but are not listed for sale.
+        if (!raw.priceNPR || raw.priceNPR <= 0) {
+          return;
+        }
         
         const photo = { ...raw, id: d.id } as StockPhoto;
         
-        // Count ALL photos for stats (makes marketplace look active)
-        allPhotos.push(photo);
+        // Count all priced photos for stats
+        listedPhotos.push(photo);
         ownerIds.add(photo.ownerId);
 
-        // Count categories from ALL photos
+        // Count categories from priced photos
         const cat = (photo.category || "").toLowerCase();
         if (cat) counts[cat] = (counts[cat] || 0) + 1;
 
@@ -271,8 +278,8 @@ export default function HomePage() {
         }
       });
 
-      // Stats show ALL photos (approved + pending + rejected)
-      setTotalPhotos(allPhotos.length);
+      // Stats show only priced/listed photos
+      setTotalPhotos(listedPhotos.length);
       setTotalPhotographers(ownerIds.size);
       setCategoryCounts(counts);
 

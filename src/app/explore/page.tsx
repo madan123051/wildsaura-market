@@ -417,8 +417,12 @@ function ExploreContent() {
           fetched.push({ ...safeData, id: doc.id } as StockPhoto);
         });
 
+        // ── Only show photos listed for sale (priceNPR > 0) ──
+        // This filters out portfolio photos from Drishya or other sources
+        // that share the same Firebase database but are not priced for sale.
+        let filtered = fetched.filter((p) => (p.priceNPR || 0) > 0);
+
         // Client-side category filter
-        let filtered = fetched;
         if (selectedCategory) {
           filtered = filtered.filter((p) => p.category === selectedCategory);
         }
