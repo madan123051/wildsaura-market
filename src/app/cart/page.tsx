@@ -22,6 +22,7 @@ import toast, { Toaster } from "react-hot-toast";
 
 const CART_KEY = "wildsaura_cart";
 const SERVICE_FEE_RATE = 0.05;
+const PLACEHOLDER_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 112 112'%3E%3Crect fill='%23e5e7eb' width='112' height='112'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial' font-size='12' fill='%239ca3af'%3ENo Image%3C/text%3E%3C/svg%3E";
 
 function getCartItems(): CartItem[] {
   if (typeof window === "undefined") return [];
@@ -166,7 +167,7 @@ export default function CartPage() {
                 {/* thumbnail */}
                 <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-surface-muted sm:h-24 sm:w-28">
                   <Image
-                    src={item.thumbnailUrl}
+                    src={item.thumbnailUrl || PLACEHOLDER_IMAGE}
                     alt={item.title}
                     fill
                     className="object-cover"
