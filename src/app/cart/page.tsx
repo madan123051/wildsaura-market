@@ -165,14 +165,20 @@ export default function CartPage() {
               >
                 {/* thumbnail */}
                 <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-surface-muted sm:h-24 sm:w-28">
-                  <Image
-                    src={item.thumbnailUrl}
-                    alt={item.title}
-                    fill
-                    className="object-cover"
-                    sizes="112px"
-                    quality={30}
-                  />
+                  {item.thumbnailUrl ? (
+                    <Image
+                      src={item.thumbnailUrl}
+                      alt={item.title}
+                      fill
+                      className="object-cover"
+                      sizes="112px"
+                      quality={30}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-gray-100">
+                      <ImageIcon className="h-8 w-8 text-gray-300" />
+                    </div>
+                  )}
                 </div>
 
                 {/* info */}

@@ -174,7 +174,10 @@ function PhotoCard({
             {formatNPR(photo.priceNPR)}
           </span>
           <button
-            onClick={() => onAddToCart(photo)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToCart(photo);
+            }}
             className="flex items-center gap-1.5 bg-brand-primary/10 hover:bg-brand-primary hover:text-white text-brand-primary font-semibold text-xs px-3 py-2 rounded-lg transition-all duration-200"
           >
             <ShoppingCart className="h-3.5 w-3.5" />
