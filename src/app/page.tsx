@@ -249,11 +249,6 @@ export default function HomePage() {
 
       allSnap.forEach((d) => {
         const raw = d.data();
-        
-        // Skip photos missing required display fields
-        if (!raw.imageUrl || !raw.thumbnailUrl || !raw.title) {
-          return;
-        }
 
         // Only count photos that are priced for sale (priceNPR > 0)
         // This excludes portfolio photos from Drishya or other sources
@@ -264,7 +259,7 @@ export default function HomePage() {
         
         const photo = { ...raw, id: d.id } as StockPhoto;
         
-        // Count all priced photos for stats
+        // Count ALL priced photos for stats (no imageUrl requirement)
         listedPhotos.push(photo);
         ownerIds.add(photo.ownerId);
 
@@ -272,8 +267,13 @@ export default function HomePage() {
         const cat = (photo.category || "").toLowerCase();
         if (cat) counts[cat] = (counts[cat] || 0) + 1;
 
-        // Separate approved+public photos for featured grid
-        if (photo.status === "approved" && photo.isPublic !== false) {
+        // Separate approved+public photos for featured grid (require display fields)
+        if (
+          photo.status === "approved" &&
+          photo.isPublic !== false &&
+          photo.thumbnailUrl &&
+          photo.title
+        ) {
           approvedPhotos.push(photo);
         }
       });

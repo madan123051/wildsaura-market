@@ -343,21 +343,23 @@ export default function PhotoDetailPage() {
           viewCount: increment(1),
         }).catch(() => {});
 
-        // related
-        const q = query(
-          collection(db, "photos"),
-          where("category", "==", data.category),
-          where("status", "==", "approved"),
-          limit(5)
-        );
-        const relSnap = await getDocs(q);
-        const relPhotos: StockPhoto[] = [];
-        relSnap.forEach((d) => {
-          if (d.id !== photoId) {
-            relPhotos.push({ id: d.id, ...d.data() } as StockPhoto);
-          }
-        });
-        if (!cancelled) setRelated(relPhotos.slice(0, 4));
+        // related — only query if category is available
+        if (data.category) {
+          const q = query(
+            collection(db, "photos"),
+            where("category", "==", data.category),
+            where("status", "==", "approved"),
+            limit(5)
+          );
+          const relSnap = await getDocs(q);
+          const relPhotos: StockPhoto[] = [];
+          relSnap.forEach((d) => {
+            if (d.id !== photoId) {
+              relPhotos.push({ id: d.id, ...d.data() } as StockPhoto);
+            }
+          });
+          if (!cancelled) setRelated(relPhotos.slice(0, 4));
+        }
       } catch (err) {
         console.error("Error fetching photo:", err);
         if (!cancelled) setNotFound(true);
@@ -446,8 +448,9 @@ export default function PhotoDetailPage() {
   }
 
   /* ── category label ── */
-  const categoryLabel =
-    photo.category.charAt(0).toUpperCase() + photo.category.slice(1);
+  const categoryLabel = photo.category
+    ? photo.category.charAt(0).toUpperCase() + photo.category.slice(1)
+    : "General";
 
   /* ── helpers for conditional sections ── */
   const hasTechnicalData = !!(
