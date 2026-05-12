@@ -59,11 +59,12 @@ export default function MarketChatbot() {
           { role: "assistant", content: data.reply },
         ]);
       } else {
+        // Show a user-friendly message — never expose raw API error strings
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: data.error || "Sorry, I couldn't process your request. Please try again.",
+            content: "I'm having a little trouble right now. Please try again in a moment! 🙏",
           },
         ]);
       }
