@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Camera,
   ImageIcon,
+  Users,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -182,6 +183,14 @@ function Navbar() {
                 </div>
               )}
             </div>
+
+            <Link
+              href="/community"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Community
+            </Link>
 
             {/* Admin-only: Sell button */}
             {isAdmin && (
@@ -386,6 +395,15 @@ function Navbar() {
               className="block px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
             >
               Explore
+            </Link>
+
+            <Link
+              href="/community"
+              onClick={() => setShowMobileMenu(false)}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
+            >
+              <Users className="w-4 h-4" />
+              Community
             </Link>
 
             {/* Mobile Categories */}
