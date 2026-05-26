@@ -10,14 +10,14 @@ import { getStorage, FirebaseStorage } from "firebase/storage";
 import { getDatabase, Database } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyCXDJrFmn-pzbqys91tj4Fruqn4tl58p9Y",
+  authDomain: "wildsaura-1ef8a.firebaseapp.com",
+  databaseURL: "https://wildsaura-1ef8a-default-rtdb.firebaseio.com",
+  projectId: "wildsaura-1ef8a",
+  storageBucket: "wildsaura-1ef8a.firebasestorage.app",
+  messagingSenderId: "690017200836",
+  appId: "1:690017200836:web:e2c24713868a943b6ff791",
+  measurementId: "G-VM7GYYJMCC",
 };
 
 // Prevent duplicate initializations in Next.js HMR / SSR
