@@ -12,7 +12,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth, storage, googleProvider, facebookProvider, appleProvider } from '@/lib/firebase';
 import type { CurrentUser } from '@/types/community';
 
-export function useCommunityAuth() {
+export function useAuth() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
