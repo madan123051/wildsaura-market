@@ -1,188 +1,61 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from 'react';
 import {
   onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  GoogleAuthProvider,
   signOut,
-  User,
   updateProfile,
-} from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
-import { setSessionCookie, clearSessionCookie } from "@/lib/session";
-import type { UserProfile } from "@/types";
+  User,
+} from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth, storage, googleProvider, facebookProvider, appleProvider } from '@/lib/firebase';
+import type { CurrentUser } from '@/types/community';
 
-interface AuthState {
-  user: User | null;
-  profile: UserProfile | null;
-  loading: boolean;
-  error: string | null;
-}
-
-interface AuthActions {
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  signupWithEmail: (name: string, email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-}
-
-const googleProvider = new GoogleAuthProvider();
-
-export function useAuth(): AuthState & AuthActions {
-  const [user,    setUser]    = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+export function useAuth() {
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
 
-  const fetchProfile = useCallback(async (uid: string) => {
-    const ref  = doc(db, "users", uid);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      setProfile(snap.data() as UserProfile);
-    }
-  }, []);
-
-  const createUserProfile = useCallback(async (
-    uid: string,
-    displayName: string,
-    email: string,
-    avatarUrl?: string
-  ) => {
-    const ref = doc(db, "users", uid);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      const newProfile: Omit<UserProfile, "createdAt"> & { createdAt: unknown } = {
-        uid,
-        displayName,
-        email,
-        avatarUrl: avatarUrl ?? "",
-        isVerified: false,
-        walletPoints: 0,
-        role: "creator",
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(ref, newProfile);
-      setProfile(newProfile as UserProfile);
-    } else {
-      setProfile(snap.data() as UserProfile);
-    }
-  }, []);
-
-  // Handle redirect result on page load (for signInWithRedirect fallback)
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) {
-          const u = result.user;
-          await createUserProfile(
-            u.uid,
-            u.displayName ?? "User",
-            u.email ?? "",
-            u.photoURL ?? ""
-          );
-        }
-      })
-      .catch((err) => {
-        console.error("Redirect sign-in error:", err);
-        setError(err.message);
-      });
-  }, [createUserProfile]);
+  const mapUser = (fbUser: User): CurrentUser => ({
+    uid: fbUser.uid,
+    displayName: fbUser.displayName || 'WildSaura User',
+    email: fbUser.email || undefined,
+    avatarUrl: fbUser.photoURL || undefined,
+    avatarColor: '#4ECDC4',
+  });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        setSessionCookie(firebaseUser.uid);
-        await fetchProfile(firebaseUser.uid);
-      } else {
-        clearSessionCookie();
-        setProfile(null);
-      }
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
+      setFirebaseUser(fbUser);
+      setUser(fbUser ? mapUser(fbUser) : null);
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, [fetchProfile]);
+    return () => unsub();
+  }, []);
 
-  const loginWithEmail = async (email: string, password: string) => {
-    setError(null);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: unknown) {
-      setError((err as Error).message);
-      throw err;
+  const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+  const loginWithFacebook = () => signInWithPopup(auth, facebookProvider);
+  const loginWithApple = () => signInWithPopup(auth, appleProvider);
+  const logout = () => signOut(auth);
+
+  const updateUserProfile = async (newName: string, photoFile: File | null) => {
+    if (!firebaseUser) return;
+    let photoURL = firebaseUser.photoURL || undefined;
+    if (photoFile) {
+      const storageRef = ref(storage, `avatars/${firebaseUser.uid}/${Date.now()}_${photoFile.name}`);
+      await uploadBytes(storageRef, photoFile);
+      photoURL = await getDownloadURL(storageRef);
     }
+    await updateProfile(firebaseUser, {
+      displayName: newName || firebaseUser.displayName,
+      photoURL: photoURL || null,
+    });
+    // Reload to get latest data
+    await firebaseUser.reload();
+    const refreshed = auth.currentUser;
+    if (refreshed) setUser(mapUser(refreshed));
   };
 
-  const signupWithEmail = async (name: string, email: string, password: string) => {
-    setError(null);
-    try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
-      await createUserProfile(cred.user.uid, name, email);
-    } catch (err: unknown) {
-      setError((err as Error).message);
-      throw err;
-    }
-  };
-
-  const loginWithGoogle = async () => {
-    setError(null);
-    try {
-      // Try popup first (works on desktop)
-      const result = await signInWithPopup(auth, googleProvider);
-      const u = result.user;
-      await createUserProfile(u.uid, u.displayName ?? "User", u.email ?? "", u.photoURL ?? "");
-    } catch (err: unknown) {
-      const firebaseError = err as { code?: string; message?: string };
-      const errorCode = firebaseError.code || "unknown";
-      const errorMsg = firebaseError.message || "Unknown error";
-      
-      console.error("Google popup sign-in failed:", errorCode, errorMsg);
-      
-      // For these errors, try redirect as fallback
-      const redirectableCodes = [
-        "auth/popup-blocked",
-        "auth/popup-closed-by-user",
-        "auth/cancelled-popup-request",
-        "auth/internal-error",
-        "auth/network-request-failed",
-      ];
-      
-      if (redirectableCodes.includes(errorCode)) {
-        try {
-          console.log("Trying signInWithRedirect fallback...");
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        } catch (redirectErr: unknown) {
-          const rErr = redirectErr as { code?: string; message?: string };
-          setError(`Redirect also failed [${rErr.code}]: ${rErr.message}`);
-          throw redirectErr;
-        }
-      }
-      
-      // Show detailed error for debugging
-      setError(`Google login failed [${errorCode}]: ${errorMsg}`);
-      throw err;
-    }
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-    clearSessionCookie();
-    setUser(null);
-    setProfile(null);
-  };
-
-  const refreshProfile = async () => {
-    if (user) await fetchProfile(user.uid);
-  };
-
-  return { user, profile, loading, error, loginWithEmail, signupWithEmail, loginWithGoogle, logout, refreshProfile };
+  return { user, firebaseUser, loading, loginWithGoogle, loginWithFacebook, loginWithApple, logout, updateUserProfile };
 }

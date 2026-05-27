@@ -47,8 +47,12 @@ export function usePosts(currentUser: CurrentUser | null) {
     imageFile: File | null,
   ): Promise<{ success: boolean; error?: string; imageUploaded?: boolean }> => {
     if (!currentUser) return { success: false, error: 'Not logged in' };
+
     let imageUrl: string | null = null;
-    if (imageFile) imageUrl = await uploadImage(imageFile, currentUser.uid);
+    if (imageFile) {
+      imageUrl = await uploadImage(imageFile, currentUser.uid);
+    }
+
     await addDoc(collection(db, 'community_posts'), {
       userId: currentUser.uid,
       username: currentUser.displayName,
@@ -63,12 +67,17 @@ export function usePosts(currentUser: CurrentUser | null) {
       avatarColor: currentUser.avatarColor || '#4ECDC4',
       spiritAnimal: currentUser.avatarAnimal || '',
     });
+
     return { success: true, imageUploaded: !!imageUrl };
   };
 
   const updatePost = async (
-    postId: string, text: string, category: string, story: string,
-    imageFile: File | null, existingImageUrl: string | null,
+    postId: string,
+    text: string,
+    category: string,
+    story: string,
+    imageFile: File | null,
+    existingImageUrl: string | null,
   ) => {
     if (!currentUser) return { success: false, error: 'Not logged in' };
     let imageUrl = existingImageUrl;
@@ -77,7 +86,10 @@ export function usePosts(currentUser: CurrentUser | null) {
       if (uploaded) imageUrl = uploaded;
     }
     await updateDoc(doc(db, 'community_posts', postId), {
-      text: text.trim(), imageUrl, category: category || '', story: story.trim() || '',
+      text: text.trim(),
+      imageUrl,
+      category: category || '',
+      story: story.trim() || '',
     });
     return { success: true };
   };
