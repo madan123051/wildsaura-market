@@ -1,45 +1,42 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "./Button";
+import { ReactNode } from 'react';
 
 interface ModalProps {
-  isOpen: boolean;
   onClose: () => void;
-  title?: string;
-  children: React.ReactNode;
-  size?: "sm" | "md" | "lg";
+  children: ReactNode;
+  maxWidth?: number;
 }
 
-const sizeMap = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl" };
-
-export function Modal({ isOpen, onClose, title, children, size = "md" }: ModalProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  if (!isOpen) return null;
-
+export function Modal({ onClose, children, maxWidth = 520 }: ModalProps) {
   return (
     <div
-      ref={overlayRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, width: '100%', height: '100%',
+        background: 'rgba(0,0,0,0.75)',
+        backdropFilter: 'blur(6px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 2000,
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className={cn("w-full bg-white rounded-2xl shadow-2xl", sizeMap[size])}>
-        <div className="flex items-center justify-between border-b border-surface-border px-6 py-4">
-          {title && <h2 className="font-heading text-lg font-semibold text-brand-dark">{title}</h2>}
-          <Button variant="ghost" size="sm" className="ml-auto" onClick={onClose}>
-            <X size={18} />
-          </Button>
-        </div>
-        <div className="px-6 py-5">{children}</div>
+      <div
+        style={{
+          background: '#16181c',
+          width: '90%',
+          maxWidth,
+          borderRadius: 24,
+          padding: '2rem',
+          border: '1px solid #2e323a',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          animation: 'slideIn 0.25s ease-out',
+        }}
+      >
+        {children}
       </div>
     </div>
   );

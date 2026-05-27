@@ -1,6 +1,6 @@
 'use client';
 
-import { Modal } from './CommunityModal';
+import { Modal } from '@/components/ui/Modal';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -15,13 +15,12 @@ export function AuthModal({ onClose, onGoogle, onFacebook, onApple }: AuthModalP
     width: '100%', padding: '0.8rem 1.2rem', borderRadius: 14,
     border: border || 'none', background: bg, color,
     fontSize: '1rem', fontWeight: 600, cursor: 'pointer', marginBottom: '0.75rem',
-    transition: 'opacity 0.2s',
   });
 
   return (
     <Modal onClose={onClose} maxWidth={380}>
       <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>\uD83C\uDF3F</div>
+        <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🌿</div>
         <h2 style={{ color: '#d4a373', fontWeight: 700, fontSize: '1.3rem', marginBottom: '0.3rem' }}>Join WildSaura Community</h2>
         <p style={{ color: '#8a8f98', fontSize: '0.9rem' }}>Sign in to post, like, and connect with wildlife lovers worldwide.</p>
       </div>
@@ -35,10 +34,9 @@ export function AuthModal({ onClose, onGoogle, onFacebook, onApple }: AuthModalP
       <button style={btnStyle('#000', '#fff', '1px solid #333')} onClick={onApple}>
         <span style={{ fontSize: '1.2rem' }}></span> Continue with Apple
       </button>
-      <button
-        style={{ width: '100%', background: 'none', border: 'none', color: '#8a8f98', fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem' }}
-        onClick={onClose}
-      >Maybe later \u2014 browse as guest</button>
+      <button style={{ width: '100%', background: 'none', border: 'none', color: '#8a8f98', fontSize: '0.85rem', cursor: 'pointer', marginTop: '0.5rem' }} onClick={onClose}>
+        Maybe later — browse as guest
+      </button>
     </Modal>
   );
 }
