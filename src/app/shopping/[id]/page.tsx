@@ -198,7 +198,7 @@ function EquipmentDetailPage() {
             </div>
 
             {/* Specifications */}
-            {(listing.yearPurchased || listing.tag) && (
+            {(listing.yearPurchased || listing.tags) && (
               <div className="mb-6 p-4 bg-white rounded-lg">
                 <h2 className="text-lg font-semibold text-gray-900 mb-3">Details</h2>
                 <div className="space-y-2 text-sm">
