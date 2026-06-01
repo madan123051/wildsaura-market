@@ -561,7 +561,7 @@ export default function SellPage() {
                 <li>✓ All photos are clear and well-lit</li>
                 <li>✓ Item description is accurate and detailed</li>
                 <li>✓ Price is competitive and fair</li>
-                <li>✓ You have photographed equipment, not someone else\'s</li>
+                <li>✓ You have photographed equipment, not someone else&apos;s</li>
               </ul>
             </div>
 
