@@ -202,11 +202,11 @@ function Navbar() {
                   </Link>
                   {CATEGORIES.map((category) => (
                     <Link
-                      key={category.id}
-                      href={`/explore?category=${category.id}`}
+                      key={category.value}
+                      href={`/explore?category=${category.value}`}
                       className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
                     >
-                      {category.name}
+                      {category.label}
                     </Link>
                   ))}
                 </div>
