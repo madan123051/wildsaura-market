@@ -9,6 +9,22 @@ export type PhotoCategory =
   | "aerial"
   | "macro";
 
+// ─── Equipment Category ───────────────────────────────
+export type EquipmentCategory =
+  | "camera"
+  | "lens"
+  | "tripod"
+  | "lighting"
+  | "bag"
+  | "computer"
+  | "mobile"
+  | "flash"
+  | "memorycard"
+  | "battery"
+  | "other";
+
+export type EquipmentCondition = "new" | "like-new" | "used" | "refurbished";
+
 // ─── User ─────────────────────────────────────────────
 export type UserRole = "creator" | "buyer" | "admin";
 
@@ -91,6 +107,42 @@ export interface StockPhoto {
   usageNotes?: string;
 }
 
+// ─── Equipment Listing ────────────────────────────────
+export interface EquipmentListing {
+  id: string;
+  sellerId: string;
+  sellerName: string;
+  sellerAvatar?: string;
+  sellerPhone?: string;
+  sellerEmail: string;
+  
+  title: string;
+  description: string;
+  category: EquipmentCategory;
+  
+  priceNPR: number;
+  condition: EquipmentCondition;
+  
+  imageUrls: string[];
+  thumbnailUrl: string;
+  
+  brand?: string;
+  model?: string;
+  yearPurchased?: number;
+  
+  tags: string[];
+  location?: string;
+  
+  viewCount: number;
+  salesCount: number;
+  
+  status: "active" | "sold" | "inactive";
+  isVerified: boolean;
+  
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // ─── Cart ─────────────────────────────────────────────
 export interface CartItem {
   photoId: string;
@@ -100,9 +152,17 @@ export interface CartItem {
   ownerName?: string;
 }
 
+export interface EquipmentCartItem {
+  equipmentId: string;
+  title: string;
+  thumbnailUrl: string;
+  priceNPR: number;
+  sellerName: string;
+}
+
 // ─── Order ────────────────────────────────────────────
 export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
-export type PaymentMethod = "esewa" | "khalti" | "wallet_points";
+export type PaymentMethod = "esewa" | "khalti" | "wallet_points" | "cash_on_delivery";
 
 export interface Order {
   id: string;
@@ -123,6 +183,28 @@ export interface OrderItem {
   thumbnailUrl: string;
   priceNPR: number;
   ownerId: string;
+}
+
+export interface EquipmentOrder {
+  id: string;
+  buyerId: string;
+  buyerEmail: string;
+  items: EquipmentOrderItem[];
+  totalNPR: number;
+  status: OrderStatus;
+  paymentMethod: PaymentMethod;
+  paymentId?: string;
+  shippingAddress?: string;
+  createdAt: Date;
+  completedAt?: Date;
+}
+
+export interface EquipmentOrderItem {
+  equipmentId: string;
+  title: string;
+  thumbnailUrl: string;
+  priceNPR: number;
+  sellerId: string;
 }
 
 // ─── Download ─────────────────────────────────────────
@@ -201,6 +283,26 @@ export const CATEGORIES: {
   { value: "street", label: "Street", icon: "🏙️", description: "Urban life, people, city" },
   { value: "aerial", label: "Aerial", icon: "🚁", description: "Drone shots, bird eye view" },
   { value: "macro", label: "Macro", icon: "🔬", description: "Close-up, tiny details" },
+];
+
+// ─── Equipment Categories Config ──────────────────────
+export const EQUIPMENT_CATEGORIES: {
+  value: EquipmentCategory;
+  label: string;
+  icon: string;
+  description: string;
+}[] = [
+  { value: "camera", label: "Cameras", icon: "📷", description: "DSLRs, Mirrorless, Point & Shoot" },
+  { value: "lens", label: "Lenses", icon: "🔍", description: "Prime, Zoom, Specialty Lenses" },
+  { value: "tripod", label: "Tripods", icon: "🎥", description: "Tripods, Monopods, Stabilizers" },
+  { value: "lighting", label: "Lighting", icon: "💡", description: "Flashes, Softboxes, Reflectors" },
+  { value: "bag", label: "Bags & Cases", icon: "🎒", description: "Camera Bags, Cases, Straps" },
+  { value: "computer", label: "Computers", icon: "💻", description: "Laptops, Desktops, Monitors" },
+  { value: "mobile", label: "Mobile Phones", icon: "📱", description: "Smartphones, Tablets, Accessories" },
+  { value: "flash", label: "Flash & Lighting", icon: "⚡", description: "External Flashes, LED Lights" },
+  { value: "memorycard", label: "Memory Cards", icon: "💾", description: "SD Cards, CFast, XQD" },
+  { value: "battery", label: "Batteries & Chargers", icon: "🔋", description: "Batteries, Chargers, Power Banks" },
+  { value: "other", label: "Other Equipment", icon: "📦", description: "Miscellaneous Photography Gear" },
 ];
 
 // ─── Photo Purchase ───────────────────────────────────

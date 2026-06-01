@@ -19,6 +19,7 @@ import {
   Camera,
   ImageIcon,
   Users,
+  ShoppingBag,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -183,6 +184,15 @@ function Navbar() {
                 </div>
               )}
             </div>
+
+            {/* Shopping Marketplace */}
+            <Link
+              href="/shopping"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+            >
+              <ShoppingBag className="w-3.5 h-3.5" />
+              Shopping
+            </Link>
 
             <Link
               href="/community"
@@ -398,6 +408,15 @@ function Navbar() {
             </Link>
 
             <Link
+              href="/shopping"
+              onClick={() => setShowMobileMenu(false)}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              Shop Equipment
+            </Link>
+
+            <Link
               href="/community"
               onClick={() => setShowMobileMenu(false)}
               className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
@@ -409,7 +428,7 @@ function Navbar() {
             {/* Mobile Categories */}
             <div className="px-4 py-2">
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Categories
+                Photo Categories
               </p>
               <div className="grid grid-cols-2 gap-1">
                 {CATEGORIES.map((cat) => (
