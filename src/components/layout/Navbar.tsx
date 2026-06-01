@@ -1,1 +1,483 @@
-\"use client\";\n\nimport { useState, useEffect, useRef } from \"react\";\nimport Image from \"next/image\";\nimport Link from \"next/link\";\nimport { useRouter } from \"next/navigation\";\nimport {\n  Leaf,\n  Search,\n  ShoppingCart,\n  Menu,\n  X,\n  ChevronDown,\n  User,\n  LogOut,\n  Download,\n  LayoutDashboard,\n  ShieldCheck,\n  Camera,\n  ImageIcon,\n  Users,\n  ShoppingBag,\n  Upload,\n} from \"lucide-react\";\nimport { db, auth } from \"@/lib/firebase\";\nimport { doc, getDoc } from \"firebase/firestore\";\nimport { onAuthStateChanged, signOut, User as FirebaseUser } from \"firebase/auth\";\nimport { clearSessionCookie } from \"@/lib/session\";\nimport type { UserProfile, CartItem } from \"@/types\";\nimport { CATEGORIES } from \"@/types\";\n\nconst ADMIN_EMAIL = \"madan123050@gmail.com\";\n\nfunction Navbar() {\n  const router = useRouter();\n  const [user, setUser] = useState<FirebaseUser | null>(null);\n  const [profile, setProfile] = useState<UserProfile | null>(null);\n  const [cartCount, setCartCount] = useState(0);\n  const [showSearch, setShowSearch] = useState(false);\n  const [searchQuery, setSearchQuery] = useState(\"\");\n  const [showMobileMenu, setShowMobileMenu] = useState(false);\n  const [showCategories, setShowCategories] = useState(false);\n  const [showUserMenu, setShowUserMenu] = useState(false);\n  const [scrolled, setScrolled] = useState(false);\n\n  const categoriesRef = useRef<HTMLDivElement>(null);\n  const userMenuRef = useRef<HTMLDivElement>(null);\n\n  const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === \"admin\";\n\n  // Auth listener\n  useEffect(() => {\n    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {\n      setUser(firebaseUser);\n      if (firebaseUser) {\n        try {\n          const userDoc = await getDoc(doc(db, \"users\", firebaseUser.uid));\n          if (userDoc.exists()) {\n            setProfile({ uid: userDoc.id, ...userDoc.data() } as UserProfile);\n          }\n        } catch {\n          setProfile(null);\n        }\n      } else {\n        setProfile(null);\n      }\n    });\n    return () => unsub();\n  }, []);\n\n  // Cart count from localStorage\n  useEffect(() => {\n    const updateCartCount = () => {\n      try {\n        const raw = localStorage.getItem(\"wildsaura_cart\");\n        const cart: CartItem[] = raw ? JSON.parse(raw) : [];\n        setCartCount(cart.length);\n      } catch {\n        setCartCount(0);\n      }\n    };\n\n    updateCartCount();\n    window.addEventListener(\"cart-updated\", updateCartCount);\n    window.addEventListener(\"storage\", updateCartCount);\n    return () => {\n      window.removeEventListener(\"cart-updated\", updateCartCount);\n      window.removeEventListener(\"storage\", updateCartCount);\n    };\n  }, []);\n\n  // Scroll detection\n  useEffect(() => {\n    const handleScroll = () => setScrolled(window.scrollY > 10);\n    window.addEventListener(\"scroll\", handleScroll, { passive: true });\n    return () => window.removeEventListener(\"scroll\", handleScroll);\n  }, []);\n\n  // Click outside to close dropdowns\n  useEffect(() => {\n    const handleClickOutside = (e: MouseEvent) => {\n      if (categoriesRef.current && !categoriesRef.current.contains(e.target as Node)) {\n        setShowCategories(false);\n      }\n      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {\n        setShowUserMenu(false);\n      }\n    };\n    document.addEventListener(\"mousedown\", handleClickOutside);\n    return () => document.removeEventListener(\"mousedown\", handleClickOutside);\n  }, []);\n\n  const handleSearch = (e: React.FormEvent) => {\n    e.preventDefault();\n    if (searchQuery.trim()) {\n      router.push(`/explore?q=${encodeURIComponent(searchQuery.trim())}`);\n      setShowSearch(false);\n      setSearchQuery(\"\");\n      setShowMobileMenu(false);\n    }\n  };\n\n  const handleLogout = async () => {\n    try {\n      await signOut(auth);\n      clearSessionCookie();\n      setShowUserMenu(false);\n      setShowMobileMenu(false);\n      router.push(\"/\");\n    } catch {\n      // silent fail\n    }\n  };\n\n  return (\n    <header\n      className={`sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b transition-shadow duration-300 ${\n        scrolled ? \"shadow-md border-transparent\" : \"border-surface-border\"\n      }`}\n    >\n      <div className=\"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8\">\n        <div className=\"flex items-center justify-between h-16\">\n          {/* Logo */}\n          <Link href=\"/\" className=\"flex items-center gap-2 flex-shrink-0\">\n            <Leaf className=\"w-7 h-7 text-brand-primary\" />\n            <span className=\"font-heading text-xl font-bold text-brand-primary\">WildSaura</span>\n          </Link>\n\n          {/* Desktop Nav */}\n          <nav className=\"hidden md:flex items-center gap-1\">\n            <Link\n              href=\"/explore\"\n              className=\"px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n            >\n              Explore\n            </Link>\n\n            {/* Categories Dropdown */}\n            <div className=\"relative\" ref={categoriesRef}>\n              <button\n                onClick={() => setShowCategories(!showCategories)}\n                className=\"flex items-center gap-1 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n              >\n                Categories\n                <ChevronDown\n                  className={`w-4 h-4 transition-transform ${showCategories ? \"rotate-180\" : \"\"}`}\n                />\n              </button>\n              {showCategories && (\n                <div className=\"absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-xl border border-surface-border py-2 z-50\">\n                  {CATEGORIES.map((cat) => (\n                    <Link\n                      key={cat.value}\n                      href={`/explore?category=${cat.value}`}\n                      onClick={() => setShowCategories(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary transition-colors\"\n                    >\n                      <span className=\"text-lg\">{cat.icon}</span>\n                      <div>\n                        <p className=\"font-medium\">{cat.label}</p>\n                        <p className=\"text-xs text-gray-400\">{cat.description}</p>\n                      </div>\n                    </Link>\n                  ))}\n                </div>\n              )}\n            </div>\n\n            {/* Shopping Marketplace */}\n            <Link\n              href=\"/shopping\"\n              className=\"flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n            >\n              <ShoppingBag className=\"w-3.5 h-3.5\" />\n              Shopping\n            </Link>\n\n            {/* Sell Equipment - Always visible when logged in */}\n            {user && (\n              <Link\n                href=\"/shopping/sell\"\n                className=\"flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg transition-all shadow-sm\"\n              >\n                <Upload className=\"w-3.5 h-3.5\" />\n                Sell\n              </Link>\n            )}\n\n            <Link\n              href=\"/community\"\n              className=\"flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n            >\n              <Users className=\"w-3.5 h-3.5\" />\n              Community\n            </Link>\n\n            {/* Admin-only: Sell button */}\n            {isAdmin && (\n              <Link\n                href=\"https://drishya.wildsaura.com\"\n                target=\"_blank\"\n                rel=\"noopener noreferrer\"\n                className=\"flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n              >\n                <Camera className=\"w-3.5 h-3.5\" />\n                Sell Photos\n              </Link>\n            )}\n\n            {/* Admin Panel button */}\n            {isAdmin && (\n              <Link\n                href=\"/admin\"\n                className=\"flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors\"\n              >\n                <ShieldCheck className=\"w-3.5 h-3.5\" />\n                Admin\n              </Link>\n            )}\n          </nav>\n\n          {/* Right Side */}\n          <div className=\"flex items-center gap-2\">\n            {/* Search Toggle */}\n            <button\n              onClick={() => setShowSearch(!showSearch)}\n              className=\"p-2 text-gray-500 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n              aria-label=\"Search\"\n            >\n              <Search className=\"w-5 h-5\" />\n            </button>\n\n            {/* Cart */}\n            <Link\n              href=\"/cart\"\n              className=\"relative p-2 text-gray-500 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors\"\n              aria-label=\"Cart\"\n            >\n              <ShoppingCart className=\"w-5 h-5\" />\n              {cartCount > 0 && (\n                <span className=\"absolute -top-0.5 -right-0.5 bg-brand-accent text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center\">\n                  {cartCount > 99 ? \"99+\" : cartCount}\n                </span>\n              )}\n            </Link>\n\n            {/* User Menu / Login */}\n            {user ? (\n              <div className=\"relative hidden md:block\" ref={userMenuRef}>\n                <button\n                  onClick={() => setShowUserMenu(!showUserMenu)}\n                  className=\"flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 transition-colors\"\n                >\n                  <div className=\"relative w-8 h-8 rounded-full overflow-hidden bg-brand-primary/10\">\n                    {profile?.avatarUrl ? (\n                      <Image\n                        src={profile.avatarUrl}\n                        alt={profile.displayName || \"\"}\n                        fill\n                        className=\"object-cover\"\n                        sizes=\"32px\"\n                      />\n                    ) : (\n                      <div className=\"w-full h-full flex items-center justify-center\">\n                        <User className=\"w-4 h-4 text-brand-primary\" />\n                      </div>\n                    )}\n                  </div>\n                  <ChevronDown\n                    className={`w-3.5 h-3.5 text-gray-500 transition-transform ${\n                      showUserMenu ? \"rotate-180\" : \"\"\n                    }`}\n                  />\n                </button>\n\n                {showUserMenu && (\n                  <div className=\"absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-surface-border py-2 z-50\">\n                    <div className=\"px-4 py-3 border-b border-surface-border\">\n                      <p className=\"text-sm font-semibold text-brand-dark truncate\">\n                        {profile?.displayName || user.displayName || \"User\"}\n                      </p>\n                      <p className=\"text-xs text-gray-400 truncate\">{user.email}</p>\n                      {isAdmin && (\n                        <span className=\"inline-block mt-1 px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full\">\n                          ADMIN\n                        </span>\n                      )}\n                    </div>\n\n                    <Link\n                      href=\"/dashboard\"\n                      onClick={() => setShowUserMenu(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors\"\n                    >\n                      <LayoutDashboard className=\"w-4 h-4\" />\n                      Dashboard\n                    </Link>\n                    <Link\n                      href=\"/dashboard?tab=listings\"\n                      onClick={() => setShowUserMenu(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors\"\n                    >\n                      <ImageIcon className=\"w-4 h-4\" />\n                      My Listings\n                    </Link>\n                    <Link\n                      href=\"/profile\"\n                      onClick={() => setShowUserMenu(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors\"\n                    >\n                      <User className=\"w-4 h-4\" />\n                      Profile\n                    </Link>\n                    <Link\n                      href=\"/downloads\"\n                      onClick={() => setShowUserMenu(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors\"\n                    >\n                      <Download className=\"w-4 h-4\" />\n                      My Downloads\n                    </Link>\n\n                    {isAdmin && (\n                      <Link\n                        href=\"/admin\"\n                        onClick={() => setShowUserMenu(false)}\n                        className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 hover:bg-purple-50 transition-colors\"\n                      >\n                        <ShieldCheck className=\"w-4 h-4\" />\n                        Admin Panel\n                      </Link>\n                    )}\n\n                    <div className=\"border-t border-surface-border mt-1 pt-1\">\n                      <button\n                        onClick={handleLogout}\n                        className=\"w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors\"\n                      >\n                        <LogOut className=\"w-4 h-4\" />\n                        Log Out\n                      </button>\n                    </div>\n                  </div>\n                )}\n              </div>\n            ) : (\n              <Link\n                href=\"/login\"\n                className=\"hidden md:inline-flex items-center gap-2 bg-brand-primary text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-brand-primary/90 transition-colors\"\n              >\n                Login\n              </Link>\n            )}\n\n            {/* Mobile Menu Toggle */}\n            <button\n              onClick={() => setShowMobileMenu(!showMobileMenu)}\n              className=\"md:hidden p-2 text-gray-500 hover:text-brand-primary rounded-lg transition-colors\"\n              aria-label=\"Menu\"\n            >\n              {showMobileMenu ? <X className=\"w-5 h-5\" /> : <Menu className=\"w-5 h-5\" />}\n            </button>\n          </div>\n        </div>\n\n        {/* Search Bar */}\n        {showSearch && (\n          <div className=\"pb-4\">\n            <form onSubmit={handleSearch} className=\"relative\">\n              <Search className=\"absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400\" />\n              <input\n                type=\"text\"\n                value={searchQuery}\n                onChange={(e) => setSearchQuery(e.target.value)}\n                placeholder=\"Search photos by keyword, category...\"\n                className=\"w-full pl-12 pr-4 py-3 bg-surface-muted rounded-xl border border-surface-border text-sm text-brand-dark placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary transition-all\"\n                autoFocus\n              />\n              <button\n                type=\"button\"\n                onClick={() => {\n                  setShowSearch(false);\n                  setSearchQuery(\"\");\n                }}\n                className=\"absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600\"\n              >\n                <X className=\"w-4 h-4\" />\n              </button>\n            </form>\n          </div>\n        )}\n      </div>\n\n      {/* Mobile Menu */}\n      {showMobileMenu && (\n        <div className=\"md:hidden border-t border-surface-border bg-white\">\n          <div className=\"px-4 py-4 space-y-1\">\n            <Link\n              href=\"/explore\"\n              onClick={() => setShowMobileMenu(false)}\n              className=\"block px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors\"\n            >\n              Explore\n            </Link>\n\n            <Link\n              href=\"/shopping\"\n              onClick={() => setShowMobileMenu(false)}\n              className=\"flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors\"\n            >\n              <ShoppingBag className=\"w-4 h-4\" />\n              Shop Equipment\n            </Link>\n\n            {user && (\n              <Link\n                href=\"/shopping/sell\"\n                onClick={() => setShowMobileMenu(false)}\n                className=\"flex items-center gap-2 px-4 py-3 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg transition-colors\"\n              >\n                <Upload className=\"w-4 h-4\" />\n                Sell Your Equipment\n              </Link>\n            )}\n\n            <Link\n              href=\"/community\"\n              onClick={() => setShowMobileMenu(false)}\n              className=\"flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors\"\n            >\n              <Users className=\"w-4 h-4\" />\n              Community\n            </Link>\n\n            {/* Mobile Categories */}\n            <div className=\"px-4 py-2\">\n              <p className=\"text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2\">\n                Photo Categories\n              </p>\n              <div className=\"grid grid-cols-2 gap-1\">\n                {CATEGORIES.map((cat) => (\n                  <Link\n                    key={cat.value}\n                    href={`/explore?category=${cat.value}`}\n                    onClick={() => setShowMobileMenu(false)}\n                    className=\"flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors\"\n                  >\n                    <span>{cat.icon}</span>\n                    {cat.label}\n                  </Link>\n                ))}\n              </div>\n            </div>\n\n            {/* Admin-only: Sell button in mobile */}\n            {isAdmin && (\n              <Link\n                href=\"https://drishya.wildsaura.com\"\n                target=\"_blank\"\n                rel=\"noopener noreferrer\"\n                onClick={() => setShowMobileMenu(false)}\n                className=\"flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors\"\n              >\n                <Camera className=\"w-4 h-4\" />\n                Sell Your Photos\n              </Link>\n            )}\n\n            <div className=\"border-t border-surface-border pt-3 mt-3\">\n              {user ? (\n                <>\n                  <div className=\"flex items-center gap-3 px-4 py-3\">\n                    <div className=\"relative w-10 h-10 rounded-full overflow-hidden bg-brand-primary/10\">\n                      {profile?.avatarUrl ? (\n                        <Image\n                          src={profile.avatarUrl}\n                          alt={profile.displayName || \"\"}\n                          fill\n                          className=\"object-cover\"\n                          sizes=\"40px\"\n                        />\n                      ) : (\n                        <div className=\"w-full h-full flex items-center justify-center\">\n                          <User className=\"w-5 h-5 text-brand-primary\" />\n                        </div>\n                      )}\n                    </div>\n                    <div>\n                      <p className=\"text-sm font-semibold text-brand-dark\">\n                        {profile?.displayName || user.displayName || \"User\"}\n                      </p>\n                      <p className=\"text-xs text-gray-400\">{user.email}</p>\n                      {isAdmin && (\n                        <span className=\"inline-block mt-0.5 px-2 py-0.5 text-[10px] font-bold bg-purple-100 text-purple-700 rounded-full\">\n                          ADMIN\n                        </span>\n                      )}\n                    </div>\n                  </div>\n                  <Link\n                    href=\"/dashboard\"\n                    onClick={() => setShowMobileMenu(false)}\n                    className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors\"\n                  >\n                    <LayoutDashboard className=\"w-4 h-4\" />\n                    Dashboard\n                  </Link>\n                  <Link\n                    href=\"/dashboard?tab=listings\"\n                    onClick={() => setShowMobileMenu(false)}\n                    className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors\"\n                  >\n                    <ImageIcon className=\"w-4 h-4\" />\n                    My Listings\n                  </Link>\n                  <Link\n                    href=\"/profile\"\n                    onClick={() => setShowMobileMenu(false)}\n                    className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors\"\n                  >\n                    <User className=\"w-4 h-4\" />\n                    Profile\n                  </Link>\n                  <Link\n                    href=\"/downloads\"\n                    onClick={() => setShowMobileMenu(false)}\n                    className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors\"\n                  >\n                    <Download className=\"w-4 h-4\" />\n                    My Downloads\n                  </Link>\n                  {isAdmin && (\n                    <Link\n                      href=\"/admin\"\n                      onClick={() => setShowMobileMenu(false)}\n                      className=\"flex items-center gap-3 px-4 py-2.5 text-sm text-purple-700 hover:bg-purple-50 rounded-lg transition-colors\"\n                    >\n                      <ShieldCheck className=\"w-4 h-4\" />\n                      Admin Panel\n                    </Link>\n                  )}\n                  <button\n                    onClick={handleLogout}\n                    className=\"w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors\"\n                  >\n                    <LogOut className=\"w-4 h-4\" />\n                    Log Out\n                  </button>\n                </>\n              ) : (\n                <Link\n                  href=\"/login\"\n                  onClick={() => setShowMobileMenu(false)}\n                  className=\"block w-full text-center bg-brand-primary text-white px-5 py-3 rounded-xl text-sm font-semibold hover:bg-brand-primary/90 transition-colors\"\n                >\n                  Login\n                </Link>\n              )}\n            </div>\n          </div>\n        </div>\n      )}\n    </header>\n  );\n}\n\nexport default Navbar;\nexport { Navbar };\n"
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  Leaf,
+  Search,
+  ShoppingCart,
+  Menu,
+  X,
+  ChevronDown,
+  User,
+  LogOut,
+  Download,
+  LayoutDashboard,
+  ShieldCheck,
+  Camera,
+  ImageIcon,
+  Users,
+  ShoppingBag,
+  Upload,
+} from "lucide-react";
+import { db, auth } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
+import { clearSessionCookie } from "@/lib/session";
+import type { UserProfile, CartItem } from "@/types";
+import { CATEGORIES } from "@/types";
+
+const ADMIN_EMAIL = "madan123050@gmail.com";
+
+function Navbar() {
+  const router = useRouter();
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [cartCount, setCartCount] = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  const categoriesRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === "admin";
+
+  // Auth listener
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
+          if (userDoc.exists()) {
+            setProfile({ uid: userDoc.id, ...userDoc.data() } as UserProfile);
+          }
+        } catch {
+          setProfile(null);
+        }
+      } else {
+        setProfile(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Cart count from localStorage
+  useEffect(() => {
+    const updateCartCount = () => {
+      try {
+        const raw = localStorage.getItem("wildsaura_cart");
+        const cart: CartItem[] = raw ? JSON.parse(raw) : [];
+        setCartCount(cart.length);
+      } catch {
+        setCartCount(0);
+      }
+    };
+
+    updateCartCount();
+    window.addEventListener("cart-updated", updateCartCount);
+    window.addEventListener("storage", updateCartCount);
+    return () => {
+      window.removeEventListener("cart-updated", updateCartCount);
+      window.removeEventListener("storage", updateCartCount);
+    };
+  }, []);
+
+  // Scroll detection
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoriesRef.current && !categoriesRef.current.contains(e.target as Node)) {
+        setShowCategories(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/explore?q=${encodeURIComponent(searchQuery.trim())}`);
+      setShowSearch(false);
+      setSearchQuery("");
+      setShowMobileMenu(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      clearSessionCookie();
+      setShowUserMenu(false);
+      setShowMobileMenu(false);
+      router.push("/");
+    } catch {
+      console.error("Logout failed");
+    }
+  };
+
+  return (
+    <nav
+      className={`sticky top-0 z-40 transition-all duration-200 ${
+        scrolled
+          ? "bg-white shadow-lg"
+          : "bg-gradient-to-b from-white to-gray-50"
+      }`}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Main navbar */}
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link href="/" className="flex items-center space-x-2 flex-shrink-0">
+            <Leaf className="w-8 h-8 text-green-600" />
+            <span className="text-xl font-bold text-gray-800">WildSaura</span>
+          </Link>
+
+          {/* Search bar (desktop) */}
+          <form
+            onSubmit={handleSearch}
+            className="hidden md:flex items-center flex-1 mx-8"
+          >
+            <div className="relative w-full">
+              <input
+                type="text"
+                placeholder="Search photos or equipment..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button
+                type="submit"
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            </div>
+          </form>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-4">
+            {/* Photos Dropdown */}
+            <div ref={categoriesRef} className="relative">
+              <button
+                onClick={() => {
+                  setShowCategories(!showCategories);
+                  setShowUserMenu(false);
+                }}
+                className="flex items-center space-x-1 text-gray-700 hover:text-gray-900 font-medium"
+              >
+                <Camera className="w-5 h-5" />
+                <span>Photos</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${
+                    showCategories ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Categories dropdown menu */}
+              {showCategories && (
+                <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl p-2 border border-gray-200">
+                  <Link
+                    href="/explore"
+                    className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  >
+                    Explore All
+                  </Link>
+                  {CATEGORIES.map((category) => (
+                    <Link
+                      key={category.id}
+                      href={`/explore?category=${category.id}`}
+                      className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                    >
+                      {category.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Shopping Marketplace */}
+            <Link
+              href="/shopping"
+              className="flex items-center space-x-1 text-gray-700 hover:text-gray-900 font-medium transition"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              <span>Shop</span>
+            </Link>
+
+            {/* Sell Button - Prominent Blue Gradient */}
+            {user && (
+              <Link
+                href="/shopping/sell"
+                className="flex items-center space-x-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-semibold hover:shadow-lg transition"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Sell</span>
+              </Link>
+            )}
+
+            {/* Cart Icon */}
+            <Link
+              href="/cart"
+              className="relative flex items-center text-gray-700 hover:text-gray-900"
+            >
+              <ShoppingCart className="w-6 h-6" />
+              {cartCount > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {cartCount}
+                </span>
+              )}
+            </Link>
+
+            {/* User Menu */}
+            <div ref={userMenuRef} className="relative">
+              <button
+                onClick={() => {
+                  setShowUserMenu(!showUserMenu);
+                  setShowCategories(false);
+                }}
+                className="flex items-center space-x-2 text-gray-700 hover:text-gray-900"
+              >
+                {profile?.profileImage ? (
+                  <Image
+                    src={profile.profileImage}
+                    alt={profile.username}
+                    width={32}
+                    height={32}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <User className="w-6 h-6" />
+                )}
+              </button>
+
+              {/* User dropdown menu */}
+              {showUserMenu && (
+                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-lg shadow-xl p-2 border border-gray-200">
+                  {user ? (
+                    <>
+                      <div className="px-4 py-2 border-b border-gray-200">
+                        <p className="font-semibold text-gray-800">
+                          {profile?.username || user.email}
+                        </p>
+                      </div>
+                      <Link
+                        href="/profile"
+                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        <User className="w-4 h-4 inline mr-2" />
+                        Profile
+                      </Link>
+                      <Link
+                        href="/dashboard"
+                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        <LayoutDashboard className="w-4 h-4 inline mr-2" />
+                        Dashboard
+                      </Link>
+                      {isAdmin && (
+                        <>
+                          <div className="border-t border-gray-200 my-2"></div>
+                          <Link
+                            href="/admin"
+                            className="block px-4 py-2 text-red-700 hover:bg-red-50 rounded-lg"
+                          >
+                            <ShieldCheck className="w-4 h-4 inline mr-2" />
+                            Admin Panel
+                          </Link>
+                        </>
+                      )}
+                      <div className="border-t border-gray-200 my-2"></div>
+                      <button
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        <LogOut className="w-4 h-4 inline mr-2" />
+                        Logout
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/login"
+                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        Login
+                      </Link>
+                      <Link
+                        href="/signup"
+                        className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                      >
+                        Sign Up
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="md:hidden text-gray-700 hover:text-gray-900"
+          >
+            {showMobileMenu ? (
+              <X className="w-6 h-6" />
+            ) : (
+              <Menu className="w-6 h-6" />
+            )}
+          </button>
+        </div>
+
+        {/* Mobile Search */}
+        {showSearch && (
+          <form onSubmit={handleSearch} className="md:hidden mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button
+                type="submit"
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Mobile Menu */}
+        {showMobileMenu && (
+          <div className="md:hidden border-t border-gray-200 py-4 space-y-2">
+            <button
+              onClick={() => setShowSearch(!showSearch)}
+              className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg flex items-center space-x-2"
+            >
+              <Search className="w-5 h-5" />
+              <span>Search</span>
+            </button>
+
+            <Link
+              href="/explore"
+              className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              <Camera className="w-4 h-4 inline mr-2" />
+              Photos
+            </Link>
+
+            <Link
+              href="/shopping"
+              className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              <ShoppingBag className="w-4 h-4 inline mr-2" />
+              Shopping
+            </Link>
+
+            {user && (
+              <Link
+                href="/shopping/sell"
+                className="block px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-semibold"
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <Upload className="w-4 h-4 inline mr-2" />
+                Sell
+              </Link>
+            )}
+
+            <Link
+              href="/cart"
+              className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              onClick={() => setShowMobileMenu(false)}
+            >
+              <ShoppingCart className="w-4 h-4 inline mr-2" />
+              Cart {cartCount > 0 && `(${cartCount})`}
+            </Link>
+
+            <div className="border-t border-gray-200 my-2"></div>
+
+            {user ? (
+              <>
+                <Link
+                  href="/profile"
+                  className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  <User className="w-4 h-4 inline mr-2" />
+                  Profile
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  <LayoutDashboard className="w-4 h-4 inline mr-2" />
+                  Dashboard
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    className="block px-4 py-2 text-red-700 hover:bg-red-50 rounded-lg"
+                    onClick={() => setShowMobileMenu(false)}
+                  >
+                    <ShieldCheck className="w-4 h-4 inline mr-2" />
+                    Admin Panel
+                  </Link>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  <LogOut className="w-4 h-4 inline mr-2" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  Login
+                </Link>
+                <Link
+                  href="/signup"
+                  className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </nav>
+  );
+}
+
+export default Navbar;
