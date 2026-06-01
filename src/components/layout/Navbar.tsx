@@ -255,10 +255,10 @@ function Navbar() {
                 }}
                 className="flex items-center space-x-2 text-gray-700 hover:text-gray-900"
               >
-                {profile?.profileImage ? (
+                {profile?.avatarUrl ? (
                   <Image
-                    src={profile.profileImage}
-                    alt={profile.username}
+                    src={profile.avatarUrl}
+                    alt={profile.displayName}
                     width={32}
                     height={32}
                     className="w-8 h-8 rounded-full object-cover"
@@ -275,7 +275,7 @@ function Navbar() {
                     <>
                       <div className="px-4 py-2 border-b border-gray-200">
                         <p className="font-semibold text-gray-800">
-                          {profile?.username || user.email}
+                          {profile?.displayName || user.email}
                         </p>
                       </div>
                       <Link
