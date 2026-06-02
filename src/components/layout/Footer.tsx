@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Leaf, Facebook, Instagram, Twitter, Youtube } from "lucide-react";
+import { Leaf, Facebook, Instagram, Twitter, Youtube, Package } from "lucide-react";
 import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 const EXPLORE_LINKS = [
@@ -27,6 +27,10 @@ const PHOTOGRAPHER_LINKS = [
   { label: "FAQ", href: "#" },
 ];
 
+const MARKETPLACE_LINKS = [
+  { label: "Shop Equipment", href: "/shopping" },
+];
+
 const SOCIAL_LINKS = [
   { label: "Facebook", icon: Facebook, href: "#" },
   { label: "Instagram", icon: Instagram, href: "#" },
@@ -38,7 +42,7 @@ function Footer() {
   return (
     <footer className="bg-brand-dark text-white">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
           {/* Brand Column */}
           <div>
             <Link href="/" className="flex items-center gap-2 mb-4">
@@ -129,6 +133,34 @@ function Footer() {
               ))}
             </ul>
 
+          </div>
+
+          {/* Marketplace Column */}
+          <div>
+            <h3 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">
+              Marketplace
+            </h3>
+            <ul className="space-y-2.5">
+              <li>
+                <Link
+                  href="/equipment/sell"
+                  className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-brand-secondary transition-colors"
+                >
+                  <Package className="w-4 h-4" />
+                  Sell Equipment
+                </Link>
+              </li>
+              {MARKETPLACE_LINKS.map((link) => (
+                <li key={link.label}>
+                  <Link
+                    href={link.href}
+                    className="text-sm text-gray-400 hover:text-brand-secondary transition-colors"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </div>

@@ -11,6 +11,8 @@ import {
   Eye,
   Search,
   Package,
+  PauseCircle,
+  PlayCircle,
   CreditCard,
   Clock,
   CheckCircle,
@@ -45,7 +47,7 @@ import {
 import { db } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
-import type { StockPhoto } from "@/types";
+import type { EquipmentListing, StockPhoto } from "@/types";
 import toast from "react-hot-toast";
 import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
@@ -59,7 +61,7 @@ interface PurchaseRecord {
   status: "completed" | "pending" | "failed";
 }
 
-type TabKey = "overview" | "listings" | "purchases" | "downloads" | "favorites";
+type TabKey = "overview" | "listings" | "equipment" | "purchases" | "downloads" | "favorites";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border border-yellow-300",
@@ -76,12 +78,14 @@ export default function DashboardPage() {
   const [downloads, setDownloads] = useState<StockPhoto[]>([]);
   const [favorites, setFavorites] = useState<StockPhoto[]>([]);
   const [myListings, setMyListings] = useState<StockPhoto[]>([]);
+  const [myEquipmentListings, setMyEquipmentListings] = useState<EquipmentListing[]>([]);
   const [stats, setStats] = useState({
     totalPurchases: 0,
     totalDownloads: 0,
     totalSpent: 0,
     favoriteCount: 0,
     myListingsCount: 0,
+    myEquipmentListingsCount: 0,
   });
 
   const tabFromUrl = searchParams.get("tab") as TabKey | null;
@@ -100,6 +104,7 @@ export default function DashboardPage() {
 
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [updatingEquipmentId, setUpdatingEquipmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -108,7 +113,7 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (tabFromUrl && ["overview", "listings", "purchases", "downloads", "favorites"].includes(tabFromUrl)) {
+    if (tabFromUrl && ["overview", "listings", "equipment", "purchases", "downloads", "favorites"].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -196,6 +201,23 @@ export default function DashboardPage() {
         );
         setMyListings(myPhotosList);
 
+        // Fetch MY EQUIPMENT LISTINGS
+        const myEquipmentRef = collection(db, "equipmentListings");
+        const myEquipmentQuery = query(
+          myEquipmentRef,
+          where("sellerId", "==", user.uid)
+        );
+        const myEquipmentSnap = await getDocs(myEquipmentQuery);
+        const myEquipmentList = myEquipmentSnap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+            updatedAt: doc.data().updatedAt?.toDate?.() || new Date(),
+          } as EquipmentListing))
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        setMyEquipmentListings(myEquipmentList);
+
         // Calculate stats
         setStats({
           totalPurchases: purchasesList.length,
@@ -203,6 +225,7 @@ export default function DashboardPage() {
           totalSpent: purchasesList.reduce((sum, p) => sum + (p.price || 0), 0),
           favoriteCount: favSnap.docs.length,
           myListingsCount: myPhotosList.length,
+          myEquipmentListingsCount: myEquipmentList.length,
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -306,6 +329,46 @@ export default function DashboardPage() {
     }
   };
 
+  // ─── Update Equipment Status ───────────────────────────────
+  const handleEquipmentStatus = async (listingId: string, status: EquipmentListing["status"]) => {
+    setUpdatingEquipmentId(listingId);
+    try {
+      await updateDoc(doc(db, "equipmentListings", listingId), {
+        status,
+        updatedAt: serverTimestamp(),
+      });
+      setMyEquipmentListings((prev) =>
+        prev.map((listing) =>
+          listing.id === listingId ? { ...listing, status, updatedAt: new Date() } : listing
+        )
+      );
+      toast.success(status === "sold" ? "Listing marked sold" : status === "inactive" ? "Listing paused" : "Listing activated");
+    } catch (err) {
+      console.error("Equipment status error:", err);
+      toast.error("Failed to update equipment listing");
+    } finally {
+      setUpdatingEquipmentId(null);
+    }
+  };
+
+  // ─── Delete Equipment Listing ───────────────────────────────
+  const handleDeleteEquipment = async (listingId: string) => {
+    if (!confirm("Are you sure you want to delete this equipment listing? This cannot be undone.")) return;
+
+    setUpdatingEquipmentId(listingId);
+    try {
+      await deleteDoc(doc(db, "equipmentListings", listingId));
+      setMyEquipmentListings((prev) => prev.filter((listing) => listing.id !== listingId));
+      setStats((prev) => ({ ...prev, myEquipmentListingsCount: Math.max(0, prev.myEquipmentListingsCount - 1) }));
+      toast.success("Equipment listing deleted");
+    } catch (err) {
+      console.error("Equipment delete error:", err);
+      toast.error("Failed to delete equipment listing");
+    } finally {
+      setUpdatingEquipmentId(null);
+    }
+  };
+
   const formatDate = (date: Date | { seconds: number } | string | undefined) => {
     if (!date) return "";
     let d: Date;
@@ -337,7 +400,7 @@ export default function DashboardPage() {
               Welcome back{user.displayName ? `, ${user.displayName}` : ""} 👋
             </h1>
             <p className="text-gray-500 mt-1">
-              Manage your listings, purchases and downloads
+              Manage photo sales, equipment listings, purchases and downloads
             </p>
           </div>
           <div className="flex gap-3 mt-4 sm:mt-0">
@@ -347,6 +410,13 @@ export default function DashboardPage() {
             >
               <Search className="w-4 h-4" />
               Browse Photos
+            </Link>
+            <Link
+              href="/equipment/sell"
+              className="inline-flex items-center gap-2 border border-emerald-200 px-5 py-2.5 rounded-xl font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+            >
+              <Package className="w-4 h-4" />
+              Sell Equipment
             </Link>
             <SellOnDrishyaButton
               variant="dashboard"
@@ -419,7 +489,8 @@ export default function DashboardPage() {
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 overflow-x-auto">
           {([
             { id: "overview" as const, label: "Overview", icon: Eye },
-            { id: "listings" as const, label: "My Listings", icon: ImageIcon },
+            { id: "listings" as const, label: "Photo Listings", icon: ImageIcon },
+            { id: "equipment" as const, label: "My Equipment Listings", icon: Package },
             { id: "purchases" as const, label: "Purchases", icon: ShoppingBag },
             { id: "downloads" as const, label: "Downloads", icon: Download },
             { id: "favorites" as const, label: "Favorites", icon: Heart },
@@ -440,6 +511,11 @@ export default function DashboardPage() {
                   {stats.myListingsCount}
                 </span>
               )}
+              {tab.id === "equipment" && stats.myEquipmentListingsCount > 0 && (
+                <span className="ml-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full px-2 py-0.5">
+                  {stats.myEquipmentListingsCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -453,20 +529,46 @@ export default function DashboardPage() {
             </div>
           ) : activeTab === "overview" ? (
             <div className="p-6">
+              {/* Primary Seller Actions */}
+              <div className="grid sm:grid-cols-2 gap-4 mb-8">
+                <Link
+                  href="/explore"
+                  className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 bg-emerald-50 hover:border-emerald-300 transition-colors"
+                >
+                  <Search className="w-8 h-8 text-emerald-600" />
+                  <div>
+                    <h4 className="font-medium text-gray-900">Browse Photos</h4>
+                    <p className="text-sm text-gray-500">Discover and license WildSaura photos</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+                </Link>
+                <Link
+                  href="/equipment/sell"
+                  className="flex items-center gap-3 p-4 rounded-xl border border-blue-100 bg-blue-50 hover:border-blue-300 transition-colors"
+                >
+                  <Package className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <h4 className="font-medium text-gray-900">Sell Equipment</h4>
+                    <p className="text-sm text-gray-500">Create a WildSaura Market gear listing</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+                </Link>
+              </div>
+
               {/* Quick Actions */}
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
                 Quick Actions
               </h3>
               <div className="grid sm:grid-cols-3 gap-4 mb-8">
                 <Link
-                  href="/explore"
+                  href="/shopping"
                   className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-emerald-200 hover:bg-emerald-50 transition-colors"
                 >
-                  <Search className="w-8 h-8 text-emerald-600" />
+                  <ShoppingBag className="w-8 h-8 text-emerald-600" />
                   <div>
-                    <h4 className="font-medium text-gray-900">Browse Photos</h4>
+                    <h4 className="font-medium text-gray-900">Shop Equipment</h4>
                     <p className="text-sm text-gray-500">
-                      Discover amazing photography
+                      Browse cameras, lenses and gear
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
@@ -492,7 +594,7 @@ export default function DashboardPage() {
                 <>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">
-                      My Recent Listings
+                      My Recent Photo Listings
                     </h3>
                     <button
                       onClick={() => setActiveTab("listings")}
@@ -585,11 +687,11 @@ export default function DashboardPage() {
             </div>
 
           ) : activeTab === "listings" ? (
-            /* ─── MY LISTINGS TAB ──────────────────────────── */
+            /* ─── MY PHOTO LISTINGS TAB ─────────────────────── */
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">
-                  My Listings
+                  My Photo Listings
                 </h3>
                 <SellOnDrishyaButton
                   variant="dashboard"
@@ -694,6 +796,139 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+
+          ) : activeTab === "equipment" ? (
+            /* ─── MY EQUIPMENT LISTINGS TAB ─────────────────── */
+            <div className="p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">My Equipment Listings</h3>
+                  <p className="text-sm text-gray-500">Edit, delete, mark sold, or pause your WildSaura Market equipment listings.</p>
+                </div>
+                <Link
+                  href="/equipment/sell"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  <Package className="h-4 w-4" />
+                  Sell Equipment
+                </Link>
+              </div>
+
+              {myEquipmentListings.length === 0 ? (
+                <div className="text-center py-16 border border-dashed border-gray-200 rounded-xl">
+                  <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No equipment listings yet</h3>
+                  <p className="text-gray-500 mb-4">Create your first internal WildSaura Market equipment listing.</p>
+                  <Link
+                    href="/equipment/sell"
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <Package className="w-4 h-4" />
+                    Sell Equipment
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myEquipmentListings.map((listing) => {
+                    const isUpdating = updatingEquipmentId === listing.id;
+                    return (
+                      <div
+                        key={listing.id}
+                        className="flex flex-col lg:flex-row items-start lg:items-center gap-4 p-4 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors"
+                      >
+                        <div className="relative w-full lg:w-28 h-44 lg:h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
+                          {listing.thumbnailUrl ? (
+                            <Image
+                              src={listing.thumbnailUrl}
+                              alt={listing.title}
+                              fill
+                              className="object-cover"
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center">
+                              <Package className="h-8 w-8 text-gray-300" />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <p className="font-semibold text-gray-900 truncate">{listing.title}</p>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
+                              listing.status === "active"
+                                ? "bg-green-100 text-green-800"
+                                : listing.status === "sold"
+                                  ? "bg-gray-200 text-gray-700"
+                                  : "bg-yellow-100 text-yellow-800"
+                            }`}>
+                              {listing.status === "inactive" ? "paused" : listing.status}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 truncate mb-1">
+                            {listing.brand} • {listing.category} • {listing.condition}
+                          </p>
+                          <p className="text-sm text-gray-500 line-clamp-2 mb-2">{listing.description}</p>
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                            <span className="font-medium text-emerald-600">NPR {listing.priceNPR}</span>
+                            {listing.location && <span>{listing.location}</span>}
+                            <span>{formatDate(listing.createdAt)}</span>
+                            {listing.contactPreference && <span>Contact: {listing.contactPreference.replace("wildsaura-", "WildSaura ")}</span>}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                          <Link
+                            href={`/equipment/sell?edit=${listing.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                            Edit
+                          </Link>
+                          {listing.status !== "sold" && (
+                            <button
+                              onClick={() => handleEquipmentStatus(listing.id, "sold")}
+                              disabled={isUpdating}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                            >
+                              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                              Mark Sold
+                            </button>
+                          )}
+                          {listing.status === "active" ? (
+                            <button
+                              onClick={() => handleEquipmentStatus(listing.id, "inactive")}
+                              disabled={isUpdating}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors disabled:opacity-50"
+                            >
+                              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PauseCircle className="w-4 h-4" />}
+                              Pause Listing
+                            </button>
+                          ) : listing.status === "inactive" ? (
+                            <button
+                              onClick={() => handleEquipmentStatus(listing.id, "active")}
+                              disabled={isUpdating}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                            >
+                              {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                              Resume
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => handleDeleteEquipment(listing.id)}
+                            disabled={isUpdating}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                          >
+                            {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

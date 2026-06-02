@@ -19,6 +19,7 @@ import {
   ImageIcon,
   Users,
   ShoppingBag,
+  Package,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -204,6 +205,14 @@ function Navbar() {
 
             <SellOnDrishyaButton variant="navbar" />
 
+            <Link
+              href="/equipment/sell"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+            >
+              <Package className="w-3.5 h-3.5" />
+              Sell Equipment
+            </Link>
+
             {/* Admin Panel button */}
             {isAdmin && (
               <Link
@@ -296,7 +305,15 @@ function Navbar() {
                       className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       <ImageIcon className="w-4 h-4" />
-                      My Listings
+                      My Photo Listings
+                    </Link>
+                    <Link
+                      href="/dashboard?tab=equipment"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Package className="w-4 h-4" />
+                      My Equipment Listings
                     </Link>
                     <Link
                       href="/profile"
@@ -442,6 +459,15 @@ function Navbar() {
               className="w-full px-4 py-3"
             />
 
+            <Link
+              href="/equipment/sell"
+              onClick={() => setShowMobileMenu(false)}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
+            >
+              <Package className="w-4 h-4" />
+              Sell Equipment
+            </Link>
+
             <div className="border-t border-surface-border pt-3 mt-3">
               {user ? (
                 <>
@@ -485,7 +511,15 @@ function Navbar() {
                     className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     <ImageIcon className="w-4 h-4" />
-                    My Listings
+                    My Photo Listings
+                  </Link>
+                  <Link
+                    href="/dashboard?tab=equipment"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <Package className="w-4 h-4" />
+                    My Equipment Listings
                   </Link>
                   <Link
                     href="/profile"
