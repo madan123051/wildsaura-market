@@ -24,6 +24,7 @@ export type EquipmentCategory =
   | "other";
 
 export type EquipmentCondition = "new" | "like-new" | "used" | "refurbished";
+export type EquipmentContactPreference = "email" | "phone" | "wildsaura-message";
 
 // ─── User ─────────────────────────────────────────────
 export type UserRole = "creator" | "buyer" | "admin";
@@ -132,6 +133,7 @@ export interface EquipmentListing {
   
   tags: string[];
   location?: string;
+  contactPreference?: EquipmentContactPreference;
   
   viewCount: number;
   salesCount: number;
