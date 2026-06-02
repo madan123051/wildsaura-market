@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
@@ -271,6 +272,18 @@ function CollapsibleSection({
 
 export default function UploadPage() {
   const { user, profile, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    if (profile && !profile.isVerified) {
+      router.push("/profile");
+    }
+  }, [loading, user, profile, router]);
 
   // Flow state
   const [step, setStep] = useState<FlowStep>("select");
@@ -801,18 +814,10 @@ export default function UploadPage() {
     );
   }
 
-  if (!user) {
+  if (!user || (profile && !profile.isVerified)) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center max-w-md">
-          <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-gray-900 mb-2">
-            Login Required
-          </h2>
-          <p className="text-gray-500">
-            Please log in to upload photos to WildSaura Market.
-          </p>
-        </div>
+      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
       </div>
     );
   }
