@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Leaf, Facebook, Instagram, Twitter, Youtube } from "lucide-react";
-import { DRISHYA_APP_URL } from "@/types";
+import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 const EXPLORE_LINKS = [
   { label: "Nature", href: "/explore?category=nature" },
@@ -23,7 +23,6 @@ const COMPANY_LINKS = [
 ];
 
 const PHOTOGRAPHER_LINKS = [
-  { label: "Sell on Drishya", href: DRISHYA_APP_URL, external: true },
   { label: "Pricing", href: "#" },
   { label: "FAQ", href: "#" },
 ];
@@ -111,38 +110,25 @@ function Footer() {
               For Photographers
             </h3>
             <ul className="space-y-2.5">
+              <li>
+                <SellOnDrishyaButton
+                  variant="navbar"
+                  hideIcon
+                  className="p-0 text-sm text-gray-400 hover:bg-transparent hover:text-brand-secondary focus:ring-offset-0"
+                />
+              </li>
               {PHOTOGRAPHER_LINKS.map((link) => (
                 <li key={link.label}>
-                  {"external" in link && link.external ? (
-                    <a
-                      href={link.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-gray-400 hover:text-brand-secondary transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  ) : (
-                    <a
-                      href={link.href}
-                      className="text-sm text-gray-400 hover:text-brand-secondary transition-colors"
-                    >
-                      {link.label}
-                    </a>
-                  )}
+                  <a
+                    href={link.href}
+                    className="text-sm text-gray-400 hover:text-brand-secondary transition-colors"
+                  >
+                    {link.label}
+                  </a>
                 </li>
               ))}
             </ul>
 
-            {/* CTA */}
-            <a
-              href={DRISHYA_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 mt-5 px-5 py-2.5 bg-brand-secondary text-brand-dark text-sm font-semibold rounded-lg hover:bg-brand-secondary/90 transition-colors"
-            >
-              Start Selling
-            </a>
           </div>
         </div>
       </div>

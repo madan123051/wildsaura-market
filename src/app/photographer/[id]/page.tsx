@@ -16,7 +16,6 @@ import {
   Loader2,
   UserX,
   Sparkles,
-  ExternalLink,
 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import {
@@ -30,7 +29,8 @@ import {
 } from "firebase/firestore";
 import toast from "react-hot-toast";
 import type { StockPhoto, UserProfile, PhotoCategory, CartItem } from "@/types";
-import { DRISHYA_APP_URL, CATEGORIES } from "@/types";
+import { CATEGORIES } from "@/types";
+import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 const ALL_CATEGORIES: { value: PhotoCategory | "all"; label: string }[] = [
   { value: "all", label: "All Photos" },
@@ -366,15 +366,7 @@ export default function PhotographerProfilePage() {
             Join Nepal&apos;s growing community of photographers. Upload your best shots on Drishya
             and start earning from your photography.
           </p>
-          <a
-            href={DRISHYA_APP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-brand-secondary text-brand-dark font-bold px-8 py-4 rounded-xl hover:bg-brand-secondary/90 transition-colors text-lg"
-          >
-            Start Selling on Drishya
-            <ExternalLink className="w-5 h-5" />
-          </a>
+          <SellOnDrishyaButton variant="hero" className="text-lg" />
         </div>
       </div>
     </div>

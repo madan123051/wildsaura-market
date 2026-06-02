@@ -10,7 +10,6 @@ import {
   Heart,
   Eye,
   Search,
-  Camera,
   Package,
   CreditCard,
   Clock,
@@ -27,7 +26,6 @@ import {
   DollarSign,
   FileText,
   AlertCircle,
-  Upload,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CATEGORIES } from "@/types";
@@ -49,6 +47,7 @@ import { ref, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import type { StockPhoto } from "@/types";
 import toast from "react-hot-toast";
+import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 interface PurchaseRecord {
   id: string;
@@ -349,13 +348,11 @@ export default function DashboardPage() {
               <Search className="w-4 h-4" />
               Browse Photos
             </Link>
-            <Link
-              href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 border border-emerald-200 text-emerald-700 px-5 py-2.5 rounded-xl font-medium hover:bg-emerald-50 transition-colors"
-            >
-              <Camera className="w-4 h-4" />
-              Sell Photo
-            </Link>
+            <SellOnDrishyaButton
+              variant="dashboard"
+              showDescription={false}
+              className="w-auto border-emerald-200 px-5 py-2.5 text-emerald-700 hover:bg-emerald-50"
+            />
           </div>
         </div>
 
@@ -487,21 +484,7 @@ export default function DashboardPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
-                <Link
-                  href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50 transition-colors"
-                >
-                  <Upload className="w-8 h-8 text-orange-600" />
-                  <div>
-                    <h4 className="font-medium text-gray-900">
-                      Sell a Photo
-                    </h4>
-                    <p className="text-sm text-gray-500">
-                      Upload & list for sale
-                    </p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
-                </Link>
+                <SellOnDrishyaButton variant="dashboard" />
               </div>
 
               {/* Recent Listings */}
@@ -608,13 +591,11 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900">
                   My Listings
                 </h3>
-                <Link
-                  href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
-                >
-                  <Upload className="w-4 h-4" />
-                  Upload New
-                </Link>
+                <SellOnDrishyaButton
+                  variant="dashboard"
+                  showDescription={false}
+                  className="w-auto bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
+                />
               </div>
 
               {myListings.length === 0 ? (
@@ -626,13 +607,11 @@ export default function DashboardPage() {
                   <p className="text-gray-500 mb-4">
                     Upload your first photo and start selling!
                   </p>
-                  <Link
-                    href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
-                  >
-                    <Camera className="w-4 h-4" />
-                    Upload Photo
-                  </Link>
+                  <SellOnDrishyaButton
+                    variant="dashboard"
+                    showDescription={false}
+                    className="w-auto bg-emerald-600 px-6 py-3 text-white hover:bg-emerald-700"
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">
