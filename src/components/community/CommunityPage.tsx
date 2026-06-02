@@ -11,12 +11,13 @@ import { MembersModal } from './MembersModal';
 import { AuthModal } from './AuthModal';
 import { Toast } from '@/components/ui/Toast';
 import type { Post } from '@/types/community';
+import { DRISHYA_APP_URL } from '@/types';
 
 const COMMUNITY_URL = 'https://market.wildsaura.com/community';
 
 const NAV_SITES = [
   { label: 'WildSaura', href: 'https://wildsaura.com', emoji: '🏠' },
-  { label: 'Drishya', href: 'https://drishya.wildsaura.com', emoji: '📸' },
+  { label: 'Drishya', href: DRISHYA_APP_URL, emoji: '📸' },
   { label: 'Community', href: 'https://community.wildsaura.com', emoji: '🌿' },
 ];
 
