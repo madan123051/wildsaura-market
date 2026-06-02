@@ -69,8 +69,8 @@ export default function SellPage() {
       return;
     }
     
-    // Logged in but not verified
-    if (!profile?.isVerified) {
+    // Logged in but not verified - only redirect if profile has loaded
+    if (profile && !profile.isVerified) {
       router.push("/profile");
       return;
     }

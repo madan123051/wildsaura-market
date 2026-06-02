@@ -356,13 +356,6 @@ export default function DashboardPage() {
               <Camera className="w-4 h-4" />
               Sell Photo
             </Link>
-            <Link
-              href="/shopping/sell"
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-blue-700 transition-colors"
-            >
-              <Upload className="w-4 h-4" />
-              Sell Equipment
-            </Link>
           </div>
         </div>
 
@@ -509,21 +502,6 @@ export default function DashboardPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
-                <Link
-                  href="/shopping/sell"
-                  className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-blue-200 hover:bg-blue-50 transition-colors"
-                >
-                  <Camera className="w-8 h-8 text-blue-600" />
-                  <div>
-                    <h4 className="font-medium text-gray-900">
-                      Sell Equipment
-                    </h4>
-                    <p className="text-sm text-gray-500">
-                      Camera, lenses & gear
-                    </p>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
-                </Link>
               </div>
 
               {/* Recent Listings */}
@@ -648,22 +626,13 @@ export default function DashboardPage() {
                   <p className="text-gray-500 mb-4">
                     Upload your first photo and start selling!
                   </p>
-                  <div className="flex gap-3 justify-center flex-wrap">
-                    <Link
-                      href="/upload"
-                      className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
-                    >
-                      <Camera className="w-4 h-4" />
-                      Upload Photo
-                    </Link>
-                    <Link
-                      href="/shopping/sell"
-                      className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors"
-                    >
-                      <Upload className="w-4 h-4" />
-                      Sell Equipment
-                    </Link>
-                  </div>
+                  <Link
+                    href="/upload"
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Upload Photo
+                  </Link>
                 </div>
               ) : (
                 <div className="space-y-4">

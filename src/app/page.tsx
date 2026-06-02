@@ -22,7 +22,6 @@ import {
   Star,
   Zap,
   Shield,
-  ExternalLink,
 } from "lucide-react";
 import {
   collection,
@@ -31,9 +30,6 @@ import {
 import { db } from "@/lib/firebase";
 import { cn, formatNPR } from "@/lib/utils";
 import type { StockPhoto, PhotoCategory } from "@/types";
-
-const DRISHYA_APP_URL =
-  process.env.NEXT_PUBLIC_DRISHYA_APP_URL || "https://drishya.wildsaura.com";
 
 const CATEGORIES: {
   value: PhotoCategory;
@@ -515,15 +511,13 @@ export default function HomePage() {
                 set your prices, and start earning from your passion.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                <a
-                  href={DRISHYA_APP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/upload"
                   className="inline-flex items-center justify-center gap-2 bg-brand-secondary hover:bg-amber-500 text-brand-dark font-bold px-8 py-4 rounded-xl transition-colors duration-200 text-base shadow-lg"
                 >
-                  Start Selling on Drishya
-                  <ExternalLink className="h-4 w-4" />
-                </a>
+                  Start Selling
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
                 <Link
                   href="/explore"
                   className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-semibold px-8 py-4 rounded-xl transition-colors duration-200 text-base border border-white/20"
@@ -626,16 +620,14 @@ export default function HomePage() {
               <ShoppingCart className="h-5 w-5" />
               Browse Photos
             </Link>
-            <a
-              href={DRISHYA_APP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              href="/upload"
               className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold px-8 py-4 rounded-xl transition-colors duration-200 text-base border border-white/20"
             >
               <Camera className="h-5 w-5" />
               Start Selling
-              <ExternalLink className="h-4 w-4 ml-0.5" />
-            </a>
+              <ArrowRight className="h-4 w-4 ml-0.5" />
+            </Link>
           </div>
         </div>
       </section>
