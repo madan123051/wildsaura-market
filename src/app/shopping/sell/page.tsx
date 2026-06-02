@@ -45,6 +45,21 @@ export default function SellPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [form, setForm] = useState<FormData>({
+    title: "",
+    description: "",
+    category: "other",
+    price: "",
+    condition: "used",
+    brand: "",
+    model: "",
+    yearPurchased: "",
+    location: "",
+    tags: [],
+    images: [],
+    imagePreviews: [],
+  });
+
   useEffect(() => {
     if (loading) return;
     
@@ -73,21 +88,6 @@ export default function SellPage() {
     );
   }
 
-
-  const [form, setForm] = useState<FormData>({
-    title: "",
-    description: "",
-    category: "other",
-    price: "",
-    condition: "used",
-    brand: "",
-    model: "",
-    yearPurchased: "",
-    location: "",
-    tags: [],
-    images: [],
-    imagePreviews: [],
-  });
 
   // Handle image upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
