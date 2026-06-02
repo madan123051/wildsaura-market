@@ -350,7 +350,7 @@ export default function DashboardPage() {
               Browse Photos
             </Link>
             <Link
-              href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
+              href="/shopping/sell"
               className="inline-flex items-center gap-2 border border-emerald-200 text-emerald-700 px-5 py-2.5 rounded-xl font-medium hover:bg-emerald-50 transition-colors"
             >
               <Camera className="w-4 h-4" />
@@ -488,7 +488,7 @@ export default function DashboardPage() {
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
                 <Link
-                  href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
+                  href="/shopping/sell"
                   className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50 transition-colors"
                 >
                   <Upload className="w-8 h-8 text-orange-600" />
@@ -609,7 +609,7 @@ export default function DashboardPage() {
                   My Listings
                 </h3>
                 <Link
-                  href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
+                  href="/shopping/sell"
                   className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors"
                 >
                   <Upload className="w-4 h-4" />
@@ -627,7 +627,7 @@ export default function DashboardPage() {
                     Upload your first photo and start selling!
                   </p>
                   <Link
-                    href="https://drishya.wildsaura.com" target="_blank" rel="noopener noreferrer"
+                    href="/shopping/sell"
                     className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
                   >
                     <Camera className="w-4 h-4" />

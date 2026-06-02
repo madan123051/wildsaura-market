@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 import {
   EQUIPMENT_CATEGORIES,
   type EquipmentCategory,
@@ -34,6 +35,7 @@ interface FormData {
 
 export default function SellPage() {
   const router = useRouter();
+  const { user, profile, loading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -42,6 +44,35 @@ export default function SellPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    if (loading) return;
+    
+    // Not logged in
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    
+    // Logged in but not verified
+    if (!profile?.isVerified) {
+      router.push("/profile");
+      return;
+    }
+  }, [user, profile, loading, router]);
+
+  // Show loading state while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Checking verification...</p>
+        </div>
+      </div>
+    );
+  }
+
 
   const [form, setForm] = useState<FormData>({
     title: "",
