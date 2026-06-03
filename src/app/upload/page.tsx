@@ -2,6 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useVerificationGuard } from "@/hooks/useVerificationGuard";
 import { db, storage } from "@/lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -271,6 +272,7 @@ function CollapsibleSection({
 
 export default function UploadPage() {
   const { user, profile, loading } = useAuth();
+  const { checking } = useVerificationGuard("/upload");
 
   // Flow state
   const [step, setStep] = useState<FlowStep>("select");
@@ -362,7 +364,7 @@ export default function UploadPage() {
       setPhotographerName(profile.displayName || "");
       setPortfolioUrl(profile.website || "");
       setCopyrightNotice(
-        `© ${new Date().getFullYear()} ${profile.displayName || ""}`
+        `\u00A9 ${new Date().getFullYear()} ${profile.displayName || ""}`
       );
     }
   }, [profile]);
@@ -593,7 +595,7 @@ export default function UploadPage() {
         } else {
           setAiFailed(true);
           toast("AI analysis unavailable. Please fill in details manually.", {
-            icon: "ℹ️",
+            icon: "\u2139\uFE0F",
           });
         }
 
@@ -767,7 +769,7 @@ export default function UploadPage() {
     setPhotographerName(profile?.displayName || "");
     setPortfolioUrl(profile?.website || "");
     setCopyrightNotice(
-      `© ${new Date().getFullYear()} ${profile?.displayName || ""}`
+      `\u00A9 ${new Date().getFullYear()} ${profile?.displayName || ""}`
     );
     setLocationName("");
     setCountry("");
@@ -791,9 +793,9 @@ export default function UploadPage() {
     setTagInput("");
   };
 
-  // ─── Loading / Auth guard ─────────────────────────────────────────────────
+  // ─── Loading / Auth / Verification guard ───────────────────────────────────
 
-  if (loading) {
+  if (loading || checking) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center">
         <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
@@ -875,7 +877,7 @@ export default function UploadPage() {
                     : "Drag & drop your photo here"}
                 </p>
                 <p className="text-sm text-gray-400">
-                  or click to browse • JPG, PNG, WebP • Max 15 MB
+                  or click to browse \u2022 JPG, PNG, WebP \u2022 Max 15 MB
                 </p>
               </div>
             </div>
@@ -964,7 +966,7 @@ export default function UploadPage() {
               className="flex-1 accent-emerald-500"
             />
             <span className="text-xs text-white/50 w-8 text-right">
-              {rotation}°
+              {rotation}\u00B0
             </span>
           </div>
         </div>
@@ -1133,7 +1135,7 @@ export default function UploadPage() {
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 {imageWidth && imageHeight && (
                   <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
-                    {imageWidth} × {imageHeight}
+                    {imageWidth} \u00D7 {imageHeight}
                   </span>
                 )}
                 {fileSize && (
@@ -1308,7 +1310,7 @@ export default function UploadPage() {
                   <option value="">Select a category</option>
                   {CATEGORIES.map((cat) => (
                     <option key={cat.value} value={cat.value}>
-                      {cat.icon} {cat.label} — {cat.description}
+                      {cat.icon} {cat.label} \u2014 {cat.description}
                     </option>
                   ))}
                 </select>
@@ -1328,7 +1330,7 @@ export default function UploadPage() {
                   className={INPUT_CLASS}
                 />
                 <p className="text-xs text-gray-400 mt-1">
-                  Set between NPR 10 – 50,000
+                  Set between NPR 10 \u2013 50,000
                 </p>
               </div>
             </div>
@@ -1369,7 +1371,7 @@ export default function UploadPage() {
                   type="text"
                   value={copyrightNotice}
                   onChange={(e) => setCopyrightNotice(e.target.value)}
-                  placeholder={`© ${new Date().getFullYear()} Your Name`}
+                  placeholder={`\u00A9 ${new Date().getFullYear()} Your Name`}
                   className={INPUT_CLASS}
                 />
               </div>
@@ -1395,7 +1397,7 @@ export default function UploadPage() {
                   type="text"
                   value={locationName}
                   onChange={(e) => setLocationName(e.target.value)}
-                  placeholder="e.g. Annapurna Base Camp, Pokhara"
+                  placeholder="e.g. Annapurna Base Camp"
                   className={INPUT_CLASS}
                 />
               </div>
@@ -1410,154 +1412,63 @@ export default function UploadPage() {
                 />
               </div>
               {gpsLat != null && gpsLng != null && (
-                <div>
-                  <label className={LABEL_CLASS}>GPS Coordinates</label>
-                  <input
-                    type="text"
-                    value={`${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)}`}
-                    readOnly
-                    className={INPUT_CLASS + " bg-gray-50 text-gray-500 cursor-not-allowed"}
-                  />
-                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                    <Info className="w-3 h-3" />
-                    GPS extracted from photo EXIF data
-                  </p>
-                </div>
+                <p className="text-xs text-gray-400">
+                  GPS: {gpsLat.toFixed(6)}, {gpsLng.toFixed(6)}
+                </p>
               )}
             </div>
           </CollapsibleSection>
 
-          {/* ─── Camera & Technical Data ───────────────────────────── */}
+          {/* ─── Camera & Technical ────────────────────────────────── */}
           <CollapsibleSection
-            icon={<Camera className="w-5 h-5" />}
-            title="Camera & Technical Data"
-            subtitle={camera || "From EXIF"}
+            icon={<Settings2 className="w-5 h-5" />}
+            title="Camera & Technical"
+            subtitle={camera || undefined}
             expanded={expandedSections.camera}
             onToggle={() => toggleSection("camera")}
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className={LABEL_CLASS}>Camera</label>
-                <input
-                  type="text"
-                  value={camera}
-                  onChange={(e) => setCamera(e.target.value)}
-                  placeholder="e.g. Canon EOS R5"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Lens</label>
-                <input
-                  type="text"
-                  value={lens}
-                  onChange={(e) => setLens(e.target.value)}
-                  placeholder="e.g. RF 70-200mm f/2.8L"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Focal Length</label>
-                <input
-                  type="text"
-                  value={focalLength}
-                  onChange={(e) => setFocalLength(e.target.value)}
-                  placeholder="e.g. 50mm"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Aperture</label>
-                <input
-                  type="text"
-                  value={aperture}
-                  onChange={(e) => setAperture(e.target.value)}
-                  placeholder="e.g. f/2.8"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Shutter Speed</label>
-                <input
-                  type="text"
-                  value={shutterSpeed}
-                  onChange={(e) => setShutterSpeed(e.target.value)}
-                  placeholder="e.g. 1/250s"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>ISO</label>
-                <input
-                  type="text"
-                  value={iso}
-                  onChange={(e) => setIso(e.target.value)}
-                  placeholder="e.g. 400"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Date Taken</label>
-                <input
-                  type="date"
-                  value={dateTaken}
-                  onChange={(e) => setDateTaken(e.target.value)}
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>White Balance</label>
-                <input
-                  type="text"
-                  value={whiteBalance}
-                  onChange={(e) => setWhiteBalance(e.target.value)}
-                  placeholder="e.g. Auto"
-                  className={INPUT_CLASS}
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Color Space</label>
-                <input
-                  type="text"
-                  value={colorSpace}
-                  readOnly
-                  className={INPUT_CLASS + " bg-gray-50 text-gray-500 cursor-not-allowed"}
-                  placeholder="—"
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Image Dimensions</label>
-                <input
-                  type="text"
-                  value={
-                    imageWidth && imageHeight
-                      ? `${imageWidth} × ${imageHeight}`
-                      : ""
-                  }
-                  readOnly
-                  className={INPUT_CLASS + " bg-gray-50 text-gray-500 cursor-not-allowed"}
-                  placeholder="—"
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>File Size</label>
-                <input
-                  type="text"
-                  value={fileSize ? formatFileSize(fileSize) : ""}
-                  readOnly
-                  className={INPUT_CLASS + " bg-gray-50 text-gray-500 cursor-not-allowed"}
-                  placeholder="—"
-                />
-              </div>
-              <div>
-                <label className={LABEL_CLASS}>Software</label>
-                <input
-                  type="text"
-                  value={software}
-                  readOnly
-                  className={INPUT_CLASS + " bg-gray-50 text-gray-500 cursor-not-allowed"}
-                  placeholder="—"
-                />
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL_CLASS}>Camera</label>
+                  <input type="text" value={camera} onChange={(e) => setCamera(e.target.value)} placeholder="Camera model" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Lens</label>
+                  <input type="text" value={lens} onChange={(e) => setLens(e.target.value)} placeholder="Lens model" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Focal Length</label>
+                  <input type="text" value={focalLength} onChange={(e) => setFocalLength(e.target.value)} placeholder="e.g. 50mm" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Aperture</label>
+                  <input type="text" value={aperture} onChange={(e) => setAperture(e.target.value)} placeholder="e.g. f/2.8" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Shutter Speed</label>
+                  <input type="text" value={shutterSpeed} onChange={(e) => setShutterSpeed(e.target.value)} placeholder="e.g. 1/250s" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>ISO</label>
+                  <input type="text" value={iso} onChange={(e) => setIso(e.target.value)} placeholder="e.g. 400" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Date Taken</label>
+                  <input type="date" value={dateTaken} onChange={(e) => setDateTaken(e.target.value)} className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>White Balance</label>
+                  <input type="text" value={whiteBalance} onChange={(e) => setWhiteBalance(e.target.value)} placeholder="e.g. Auto" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Color Space</label>
+                  <input type="text" value={colorSpace} onChange={(e) => setColorSpace(e.target.value)} placeholder="e.g. sRGB" className={INPUT_CLASS} />
+                </div>
+                <div>
+                  <label className={LABEL_CLASS}>Software</label>
+                  <input type="text" value={software} onChange={(e) => setSoftware(e.target.value)} placeholder="e.g. Lightroom" className={INPUT_CLASS} />
+                </div>
               </div>
             </div>
           </CollapsibleSection>
@@ -1573,51 +1484,33 @@ export default function UploadPage() {
             <div className="space-y-4">
               <div>
                 <label className={LABEL_CLASS}>License Type</label>
-                <select
-                  value={licenseType}
-                  onChange={(e) => setLicenseType(e.target.value)}
-                  className={INPUT_CLASS}
-                >
+                <select value={licenseType} onChange={(e) => setLicenseType(e.target.value)} className={INPUT_CLASS}>
                   <option value="Standard">Standard</option>
                   <option value="Extended">Extended</option>
-                  <option value="Editorial Only">Editorial Only</option>
+                  <option value="Editorial">Editorial Only</option>
                 </select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL_CLASS}>Model Release</label>
-                  <select
-                    value={modelRelease}
-                    onChange={(e) => setModelRelease(e.target.value)}
-                    className={INPUT_CLASS}
-                  >
+                  <select value={modelRelease} onChange={(e) => setModelRelease(e.target.value)} className={INPUT_CLASS}>
                     <option value="Not Required">Not Required</option>
-                    <option value="Yes - Attached">Yes - Attached</option>
+                    <option value="Yes">Yes, on file</option>
                     <option value="No">No</option>
                   </select>
                 </div>
                 <div>
                   <label className={LABEL_CLASS}>Property Release</label>
-                  <select
-                    value={propertyRelease}
-                    onChange={(e) => setPropertyRelease(e.target.value)}
-                    className={INPUT_CLASS}
-                  >
+                  <select value={propertyRelease} onChange={(e) => setPropertyRelease(e.target.value)} className={INPUT_CLASS}>
                     <option value="Not Required">Not Required</option>
-                    <option value="Yes - Attached">Yes - Attached</option>
+                    <option value="Yes">Yes, on file</option>
                     <option value="No">No</option>
                   </select>
                 </div>
               </div>
               <div>
                 <label className={LABEL_CLASS}>Usage Notes</label>
-                <textarea
-                  value={usageNotes}
-                  onChange={(e) => setUsageNotes(e.target.value)}
-                  rows={3}
-                  placeholder="e.g. Not for commercial use without explicit permission..."
-                  className={INPUT_CLASS + " resize-none"}
-                />
+                <textarea value={usageNotes} onChange={(e) => setUsageNotes(e.target.value)} rows={2} placeholder="Any restrictions or usage guidelines..." className={INPUT_CLASS + " resize-none"} />
               </div>
             </div>
           </CollapsibleSection>
@@ -1626,34 +1519,12 @@ export default function UploadPage() {
           <CollapsibleSection
             icon={<Tag className="w-5 h-5" />}
             title="Tags"
-            subtitle={tags.length > 0 ? `${tags.length} tag${tags.length !== 1 ? "s" : ""}` : "Add up to 25"}
+            subtitle={tags.length > 0 ? `${tags.length} tag${tags.length === 1 ? "" : "s"}` : undefined}
             expanded={expandedSections.tags}
             onToggle={() => toggleSection("tags")}
           >
             <div className="space-y-3">
-              {/* Tag chips */}
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium border border-emerald-100"
-                    >
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => removeTag(tag)}
-                        className="ml-0.5 text-emerald-400 hover:text-red-500 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Tag input */}
-              <div className="flex items-center gap-2">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={tagInput}
@@ -1664,48 +1535,59 @@ export default function UploadPage() {
                       addTag();
                     }
                   }}
-                  maxLength={40}
-                  placeholder="Type a tag and press Enter"
-                  className={INPUT_CLASS + " flex-1"}
+                  placeholder="Add a tag and press Enter"
+                  className={INPUT_CLASS}
                 />
                 <button
                   type="button"
                   onClick={addTag}
-                  disabled={tags.length >= 25}
-                  className="px-4 py-3 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors shrink-0"
                 >
                   <Plus className="w-4 h-4" />
-                  Add
                 </button>
               </div>
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-lg text-xs font-medium"
+                    >
+                      {tag}
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="hover:text-red-500 transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
               <p className="text-xs text-gray-400">
-                {tags.length}/25 tags • Press Enter or click Add
+                {tags.length}/25 tags \u2022 Press Enter or click + to add
               </p>
             </div>
           </CollapsibleSection>
 
-          {/* ─── Submit Section ─────────────────────────────────────── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <button
-                onClick={handleSubmit}
-                className="w-full sm:flex-1 px-6 py-3.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 text-base shadow-sm shadow-emerald-200"
-              >
-                <Send className="w-5 h-5" />
-                {isMarketable === false
-                  ? "Request Admin Review"
-                  : "Submit for Review"}
-              </button>
-              <button
-                onClick={resetAll}
-                className="w-full sm:w-auto px-6 py-3.5 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-            <p className="text-xs text-gray-400 text-center mt-3">
-              Your photo will be reviewed by our team before going live
-            </p>
+          {/* ─── Submit Button ─────────────────────────────────────── */}
+          <div className="flex items-center justify-between pt-2">
+            <button
+              type="button"
+              onClick={resetAll}
+              className="px-6 py-3 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+            >
+              Start Over
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="px-8 py-3 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-lg shadow-emerald-600/20"
+            >
+              <Send className="w-4 h-4" />
+              Submit Photo
+            </button>
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { useVerificationGuard } from "@/hooks/useVerificationGuard";
 import { EQUIPMENT_CATEGORIES } from "@/types";
 import type { EquipmentCategory, EquipmentCondition, EquipmentContactPreference, EquipmentListing } from "@/types";
 
@@ -57,6 +58,7 @@ const emptyForm = {
 
 export default function SellEquipmentPage() {
   const { user, profile, loading } = useAuth();
+  const { checking: verificationChecking } = useVerificationGuard("/equipment/sell");
   const router = useRouter();
   const searchParams = useSearchParams();
   const editId = searchParams.get("edit");
@@ -224,7 +226,7 @@ export default function SellEquipmentPage() {
     }
   };
 
-  if (loading || loadingListing) {
+  if (loading || loadingListing || verificationChecking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
@@ -414,7 +416,7 @@ export default function SellEquipmentPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
             <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-amber-800">
-              Photo selling remains labeled as “Sell Photos” and continues through Drishya. Use this page only to sell cameras, lenses, accessories, and other equipment.
+              Photo selling remains labeled as \u201CSell Photos\u201D and continues through Drishya. Use this page only to sell cameras, lenses, accessories, and other equipment.
             </p>
           </div>
 
