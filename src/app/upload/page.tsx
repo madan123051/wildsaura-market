@@ -272,7 +272,7 @@ function CollapsibleSection({
 
 export default function UploadPage() {
   const { user, profile, loading } = useAuth();
-  const { checking } = useVerificationGuard("/upload");
+  const { isVerified, checking } = useVerificationGuard("/upload");
 
   // Flow state
   const [step, setStep] = useState<FlowStep>("select");
@@ -814,6 +814,33 @@ export default function UploadPage() {
           <p className="text-gray-500">
             Please log in to upload photos to WildSaura Market.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Verification guard ───────────────────────────────────────────────────
+
+  if (!isVerified) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center max-w-md w-full">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            Account Verification Required
+          </h2>
+          <p className="text-gray-500 mb-6 text-sm">
+            Your account needs to be verified before you can upload and sell photos on WildSaura Market.
+            Complete your profile verification to get started.
+          </p>
+          <a
+            href="/profile"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+          >
+            Complete Verification
+          </a>
         </div>
       </div>
     );
