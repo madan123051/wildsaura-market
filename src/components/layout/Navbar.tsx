@@ -20,6 +20,7 @@ import {
   Users,
   ShoppingBag,
   Package,
+  Camera,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -27,7 +28,6 @@ import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth
 import { clearSessionCookie } from "@/lib/session";
 import type { UserProfile, CartItem } from "@/types";
 import { CATEGORIES } from "@/types";
-import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 const ADMIN_EMAIL = "madan123050@gmail.com";
 
@@ -203,10 +203,16 @@ function Navbar() {
               Community
             </Link>
 
-            <SellOnDrishyaButton variant="navbar" />
+            <Link
+              href="/upload"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Sell Photo
+            </Link>
 
             <Link
-              href="/equipment/sell"
+              href="/shopping/sell"
               className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
             >
               <Package className="w-3.5 h-3.5" />
@@ -453,14 +459,17 @@ function Navbar() {
               </div>
             </div>
 
-            <SellOnDrishyaButton
-              variant="navbar"
-              onBeforeOpen={() => setShowMobileMenu(false)}
-              className="w-full px-4 py-3"
-            />
+            <Link
+              href="/upload"
+              onClick={() => setShowMobileMenu(false)}
+              className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
+            >
+              <Camera className="w-4 h-4" />
+              Sell Photo
+            </Link>
 
             <Link
-              href="/equipment/sell"
+              href="/shopping/sell"
               onClick={() => setShowMobileMenu(false)}
               className="flex items-center gap-2 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-brand-primary/5 hover:text-brand-primary rounded-lg transition-colors"
             >
