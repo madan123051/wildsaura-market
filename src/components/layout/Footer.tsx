@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { type ReactNode, useState } from "react";
-import { ChevronDown, Leaf, Facebook, Instagram, Twitter, Youtube, Package, Camera } from "lucide-react";
+import { ChevronDown, Facebook, Instagram, Twitter, Youtube, Package, Camera } from "lucide-react";
 
 const EXPLORE_LINKS = [
   { label: "Nature", href: "/explore?category=nature" },
@@ -110,9 +111,8 @@ function Footer() {
         {/* Mobile Layout */}
         <div className="sm:hidden">
           <div className="mb-4">
-            <Link href="/" className="mb-3 flex items-center gap-2">
-              <Leaf className="h-6 w-6 text-brand-secondary" />
-              <span className="font-heading text-xl font-bold text-white">WildSaura</span>
+            <Link href="/" className="mb-3 flex items-center">
+              <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
             </Link>
             <p className="mb-4 text-sm leading-relaxed text-gray-400">
               Nepal&apos;s premier stock photography marketplace.
@@ -191,9 +191,8 @@ function Footer() {
         <div className="hidden grid-cols-1 gap-10 sm:grid sm:grid-cols-2 lg:grid-cols-5">
           {/* Brand Column */}
           <div>
-            <Link href="/" className="mb-4 flex items-center gap-2">
-              <Leaf className="h-6 w-6 text-brand-secondary" />
-              <span className="font-heading text-xl font-bold text-white">WildSaura</span>
+            <Link href="/" className="mb-4 flex items-center">
+              <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
             </Link>
             <p className="mb-6 text-sm leading-relaxed text-gray-400">
               Nepal&apos;s premier stock photography marketplace. Discover stunning visuals captured

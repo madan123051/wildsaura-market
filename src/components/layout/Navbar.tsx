@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Leaf,
   Search,
   ShoppingCart,
   Menu,
@@ -141,9 +140,8 @@ function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <Leaf className="w-7 h-7 text-brand-primary" />
-            <span className="font-heading text-xl font-bold text-brand-primary">WildSaura</span>
+          <Link href="/" className="flex items-center flex-shrink-0">
+            <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
           </Link>
 
           {/* Desktop Nav */}
