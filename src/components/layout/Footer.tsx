@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { type ReactNode, useState } from "react";
-import { ChevronDown, Leaf, Facebook, Instagram, Twitter, Youtube, Package } from "lucide-react";
-import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
+import { ChevronDown, Leaf, Facebook, Instagram, Twitter, Youtube, Package, Camera } from "lucide-react";
 
 const EXPLORE_LINKS = [
   { label: "Nature", href: "/explore?category=nature" },
@@ -147,11 +146,12 @@ function Footer() {
             <MobileAccordionSection id="footer-photographers" title="For Photographers">
               <ul className="space-y-2.5">
                 <li>
-                  <SellOnDrishyaButton
-                    variant="navbar"
-                    hideIcon
-                    className="p-0 text-sm text-gray-400 hover:bg-transparent hover:text-brand-secondary focus:ring-offset-0"
-                  />
+                  <Link
+                    href="/upload"
+                    className="text-sm text-gray-400 transition-colors hover:text-brand-secondary"
+                  >
+                    Sell Photos
+                  </Link>
                 </li>
                 {PHOTOGRAPHER_LINKS.map((link) => (
                   <li key={link.label}>
@@ -168,7 +168,7 @@ function Footer() {
 
             <div className="flex flex-wrap gap-x-5 gap-y-2 border-b border-t border-white/10 py-3">
               <Link
-                href="/equipment/sell"
+                href="/shopping/sell"
                 className="inline-flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-brand-secondary"
               >
                 <Package className="h-4 w-4" />
@@ -250,11 +250,12 @@ function Footer() {
             </h3>
             <ul className="space-y-2.5">
               <li>
-                <SellOnDrishyaButton
-                  variant="navbar"
-                  hideIcon
-                  className="p-0 text-sm text-gray-400 hover:bg-transparent hover:text-brand-secondary focus:ring-offset-0"
-                />
+                <Link
+                  href="/upload"
+                  className="text-sm text-gray-400 transition-colors hover:text-brand-secondary"
+                >
+                  Sell Photos
+                </Link>
               </li>
               {PHOTOGRAPHER_LINKS.map((link) => (
                 <li key={link.label}>
@@ -277,7 +278,7 @@ function Footer() {
             <ul className="space-y-2.5">
               <li>
                 <Link
-                  href="/equipment/sell"
+                  href="/shopping/sell"
                   className="inline-flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-brand-secondary"
                 >
                   <Package className="h-4 w-4" />

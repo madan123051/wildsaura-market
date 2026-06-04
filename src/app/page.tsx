@@ -30,7 +30,6 @@ import {
 import { db } from "@/lib/firebase";
 import { cn, formatNPR } from "@/lib/utils";
 import type { StockPhoto, PhotoCategory } from "@/types";
-import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 const CATEGORIES: {
   value: PhotoCategory;
@@ -507,12 +506,18 @@ export default function HomePage() {
                 <span className="text-brand-secondary">Income</span>
               </h2>
               <p className="mt-6 text-lg text-white/80 leading-relaxed max-w-lg">
-                Upload your photos on Drishya and sell them through WildSaura.
+                Upload your best photos and sell them on WildSaura.
                 Reach buyers looking for authentic Nepali photography, set your
                 prices, and start earning from your passion.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-4">
-                <SellOnDrishyaButton variant="hero" />
+                <Link
+                  href="/upload"
+                  className="inline-flex items-center justify-center gap-2 bg-brand-secondary hover:bg-amber-500 text-brand-dark font-bold px-8 py-4 rounded-xl text-base shadow-lg transition-colors duration-200"
+                >
+                  <Camera className="h-5 w-5" />
+                  Start Selling
+                </Link>
                 <Link
                   href="/explore"
                   className="inline-flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white font-semibold px-8 py-4 rounded-xl transition-colors duration-200 text-base border border-white/20"
@@ -614,6 +619,13 @@ export default function HomePage() {
             >
               <ShoppingCart className="h-5 w-5" />
               Browse Photos
+            </Link>
+            <Link
+              href="/upload"
+              className="inline-flex items-center gap-2 bg-brand-secondary hover:bg-amber-500 text-brand-dark font-bold px-8 py-4 rounded-xl transition-colors duration-200 text-base"
+            >
+              <Camera className="h-5 w-5" />
+              Start Selling
             </Link>
 
           </div>

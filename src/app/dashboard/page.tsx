@@ -28,6 +28,8 @@ import {
   DollarSign,
   FileText,
   AlertCircle,
+  Camera,
+  Upload,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CATEGORIES } from "@/types";
@@ -49,7 +51,6 @@ import { ref, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
 import type { EquipmentListing, StockPhoto } from "@/types";
 import toast from "react-hot-toast";
-import { SellOnDrishyaButton } from "@/components/SellOnDrishyaButton";
 
 interface PurchaseRecord {
   id: string;
@@ -412,17 +413,19 @@ export default function DashboardPage() {
               Browse Photos
             </Link>
             <Link
-              href="/equipment/sell"
-              className="inline-flex items-center gap-2 border border-emerald-200 px-5 py-2.5 rounded-xl font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+              href="/upload"
+              className="inline-flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
             >
-              <Package className="w-4 h-4" />
+              <Camera className="w-4 h-4" />
+              Sell Photo
+            </Link>
+            <Link
+              href="/shopping/sell"
+              className="inline-flex items-center gap-2 border border-blue-200 text-blue-700 px-5 py-2.5 rounded-xl font-medium hover:bg-blue-50 transition-colors"
+            >
+              <ShoppingBag className="w-4 h-4" />
               Sell Equipment
             </Link>
-            <SellOnDrishyaButton
-              variant="dashboard"
-              showDescription={false}
-              className="w-auto border-emerald-200 px-5 py-2.5 text-emerald-700 hover:bg-emerald-50"
-            />
           </div>
         </div>
 
@@ -543,13 +546,24 @@ export default function DashboardPage() {
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
                 <Link
-                  href="/equipment/sell"
+                  href="/upload"
+                  className="flex items-center gap-3 p-4 rounded-xl border border-emerald-100 bg-emerald-50 hover:border-emerald-300 transition-colors"
+                >
+                  <Camera className="w-8 h-8 text-emerald-600" />
+                  <div>
+                    <h4 className="font-medium text-gray-900">Sell Photo</h4>
+                    <p className="text-sm text-gray-500">Upload and sell your photography</p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+                </Link>
+                <Link
+                  href="/shopping/sell"
                   className="flex items-center gap-3 p-4 rounded-xl border border-blue-100 bg-blue-50 hover:border-blue-300 transition-colors"
                 >
                   <Package className="w-8 h-8 text-blue-600" />
                   <div>
                     <h4 className="font-medium text-gray-900">Sell Equipment</h4>
-                    <p className="text-sm text-gray-500">Create a WildSaura Market gear listing</p>
+                    <p className="text-sm text-gray-500">List cameras, lenses & gear on WildSaura Market</p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
@@ -586,7 +600,19 @@ export default function DashboardPage() {
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
                 </Link>
-                <SellOnDrishyaButton variant="dashboard" />
+                <Link
+                  href="/upload"
+                  className="flex items-center gap-3 p-4 rounded-xl border border-gray-100 hover:border-orange-200 hover:bg-orange-50 transition-colors"
+                >
+                  <Camera className="w-8 h-8 text-orange-600" />
+                  <div>
+                    <h4 className="font-medium text-gray-900">Sell a Photo</h4>
+                    <p className="text-sm text-gray-500">
+                      Upload and sell your photography
+                    </p>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-400 ml-auto" />
+                </Link>
               </div>
 
               {/* Recent Listings */}
@@ -693,11 +719,13 @@ export default function DashboardPage() {
                 <h3 className="text-lg font-semibold text-gray-900">
                   My Photo Listings
                 </h3>
-                <SellOnDrishyaButton
-                  variant="dashboard"
-                  showDescription={false}
-                  className="w-auto bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-700"
-                />
+                <Link
+                  href="/upload"
+                  className="inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 text-sm rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                >
+                  <Camera className="w-4 h-4" />
+                  Upload Photo
+                </Link>
               </div>
 
               {myListings.length === 0 ? (
@@ -709,11 +737,13 @@ export default function DashboardPage() {
                   <p className="text-gray-500 mb-4">
                     Upload your first photo and start selling!
                   </p>
-                  <SellOnDrishyaButton
-                    variant="dashboard"
-                    showDescription={false}
-                    className="w-auto bg-emerald-600 px-6 py-3 text-white hover:bg-emerald-700"
-                  />
+                  <Link
+                    href="/upload"
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                  >
+                    <Camera className="w-4 h-4" />
+                    Upload Photo
+                  </Link>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -810,7 +840,7 @@ export default function DashboardPage() {
                   <p className="text-sm text-gray-500">Edit, delete, mark sold, or pause your WildSaura Market equipment listings.</p>
                 </div>
                 <Link
-                  href="/equipment/sell"
+                  href="/shopping/sell"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                 >
                   <Package className="h-4 w-4" />
@@ -824,7 +854,7 @@ export default function DashboardPage() {
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No equipment listings yet</h3>
                   <p className="text-gray-500 mb-4">Create your first internal WildSaura Market equipment listing.</p>
                   <Link
-                    href="/equipment/sell"
+                    href="/shopping/sell"
                     className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
                   >
                     <Package className="w-4 h-4" />
@@ -882,7 +912,7 @@ export default function DashboardPage() {
 
                         <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                           <Link
-                            href={`/equipment/sell?edit=${listing.id}`}
+                            href={`/shopping/sell?edit=${listing.id}`}
                             className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
                           >
                             <Edit3 className="w-4 h-4" />
