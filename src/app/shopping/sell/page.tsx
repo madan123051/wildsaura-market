@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
 import {
   EQUIPMENT_CATEGORIES,
   type EquipmentCategory,
@@ -69,9 +70,9 @@ export default function SellPage() {
       return;
     }
     
-    // Logged in but not verified - only redirect if profile has loaded
+    // Logged in but not verified — redirect to identity.wildsaura.com/verify
     if (profile && !profile.isVerified) {
-      router.push("/profile");
+      redirectToIdentityVerify(`${MARKET_URL}/shopping/sell`);
       return;
     }
   }, [user, profile, loading, router]);
