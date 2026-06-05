@@ -5,6 +5,9 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "@/lib/firebase";
 import {
   EQUIPMENT_CATEGORIES,
   type EquipmentCategory,
@@ -177,19 +180,74 @@ export default function SellPage() {
   // Submit listing
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!form.title || !form.price || form.images.length === 0) {
       setError("Please fill all required fields and upload at least one image");
       return;
     }
 
+    if (!user || !profile) {
+      setError("You must be logged in to publish a listing.");
+      return;
+    }
+
     setIsSubmitting(true);
+    setError("");
     try {
-      // TODO: Call API to create listing in Firebase
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      setSuccess("Listing published successfully!");
+      // 1. Upload all images to Firebase Storage
+      const imageUrls: string[] = [];
+      const timestamp = Date.now();
+
+      for (let i = 0; i < form.images.length; i++) {
+        const file = form.images[i];
+        const storageRef = ref(
+          storage,
+          `equipmentListings/${user.uid}/${timestamp}/${i}_${file.name}`
+        );
+        const snapshot = await uploadBytes(storageRef, file);
+        const downloadUrl = await getDownloadURL(snapshot.ref);
+        imageUrls.push(downloadUrl);
+      }
+
+      // 2. Save listing document to Firestore
+      await addDoc(collection(db, "equipmentListings"), {
+        sellerId: user.uid,
+        sellerName: profile.displayName || user.displayName || "Anonymous",
+        sellerAvatar: profile.avatarUrl || user.photoURL || "",
+        sellerEmail: user.email || "",
+
+        title: form.title,
+        description: form.description,
+        category: form.category,
+
+        priceNPR: Number(form.price),
+        condition: form.condition,
+
+        imageUrls,
+        thumbnailUrl: imageUrls[0],
+
+        brand: form.brand || "",
+        model: form.model || "",
+        yearPurchased: form.yearPurchased ? Number(form.yearPurchased) : null,
+
+        tags: form.tags,
+        location: form.location || "",
+        contactPreference: "wildsaura-message",
+
+        viewCount: 0,
+        salesCount: 0,
+
+        status: "active",
+        isVerified: profile.isVerified || false,
+
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      setSuccess("🎉 Listing published successfully!");
       setTimeout(() => router.push("/shopping"), 2000);
     } catch (err) {
+      console.error("Error publishing listing:", err);
       setError("Failed to publish listing. Please try again.");
     } finally {
       setIsSubmitting(false);
