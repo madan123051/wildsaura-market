@@ -272,7 +272,7 @@ function CollapsibleSection({
 
 export default function UploadPage() {
   const { user, profile, loading } = useAuth();
-  const { isVerified, checking } = useVerificationGuard("/upload");
+  const { isVerified, verificationStatus, checking } = useVerificationGuard("/upload");
 
   // Flow state
   const [step, setStep] = useState<FlowStep>("select");
@@ -822,25 +822,60 @@ export default function UploadPage() {
   // ─── Verification guard ───────────────────────────────────────────────────
 
   if (!isVerified) {
+    const isPending = verificationStatus === "pending";
+    const IDENTITY_URL =
+      process.env.NEXT_PUBLIC_IDENTITY_APP_URL || "https://identity.wildsaura.com";
+    const MARKET_URL =
+      process.env.NEXT_PUBLIC_MARKET_URL || "https://market.wildsaura.com";
+    const verifyHref = `${IDENTITY_URL}/verify?return=${encodeURIComponent(
+      `${MARKET_URL}/upload`
+    )}`;
+
     return (
       <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center max-w-md w-full">
-          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="w-8 h-8 text-amber-500" />
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">
-            Account Verification Required
-          </h2>
-          <p className="text-gray-500 mb-6 text-sm">
-            Your account needs to be verified before you can upload and sell photos on WildSaura Market.
-            Complete your profile verification to get started.
-          </p>
-          <a
-            href="/profile"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
-          >
-            Complete Verification
-          </a>
+          {isPending ? (
+            <>
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Info className="w-8 h-8 text-blue-500" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                Verification Under Review
+              </h2>
+              <p className="text-gray-500 mb-6 text-sm">
+                Your identity verification request has been submitted and is currently being reviewed by the WildSaura team. You will be able to upload and sell photos once your account is approved.
+              </p>
+              <div className="bg-blue-50 rounded-xl px-4 py-3 text-sm text-blue-700 font-medium">
+                ⏳ Usually reviewed within 24–48 hours
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-amber-500" />
+              </div>
+              <h2 className="text-xl font-bold text-gray-900 mb-2">
+                Account Verification Required
+              </h2>
+              <p className="text-gray-500 mb-6 text-sm">
+                Your account needs to be verified before you can upload and sell photos on WildSaura Market.
+                {verificationStatus === "rejected" && (
+                  <span className="block mt-2 text-red-500 font-medium">
+                    Your previous verification was not approved. Please re-submit with correct documents.
+                  </span>
+                )}
+              </p>
+              <a
+                href={verifyHref}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+              >
+                Complete Verification →
+              </a>
+              <p className="text-xs text-gray-400 mt-3">
+                You'll be redirected to WildSaura Identity and automatically brought back here after verification.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );

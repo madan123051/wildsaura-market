@@ -3,39 +3,59 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./useAuth";
 
+export type SellerVerificationStatus =
+  | "not_started"
+  | "pending"
+  | "verified"
+  | "rejected"
+  | null;
+
 /**
- * Guards a page behind `profile.isVerified`.
+ * Guards a page behind seller verification status.
  *
- * Behaviour:
- *  1. Refreshes the user profile from Firestore once on mount so that any
- *     `isVerified` update written externally is picked up immediately.
- *  2. Returns `{ isVerified, checking }` — the consuming page is responsible
- *     for rendering appropriate UI when `isVerified` is false.
- *     No automatic external redirects are performed.
+ * Reads both `isVerified` (market's own field) and `verified` (written by
+ * identity.wildsaura after admin approval) so the two apps stay in sync even
+ * though they share the same Firestore project.
  *
- * @param _destinationPath  Kept for API compatibility (no longer used for redirect).
- * @returns `{ isVerified, checking }` — render a spinner while `checking` is true.
+ * Returns:
+ *  - `isVerified`          true when the seller is fully approved
+ *  - `verificationStatus`  granular status for UI differentiation
+ *  - `checking`            true while auth / profile is loading
  */
 export function useVerificationGuard(_destinationPath: string) {
   const { user, profile, loading, refreshProfile } = useAuth();
   const [refreshed, setRefreshed] = useState(false);
 
-  // Refresh profile once as soon as auth state resolves to pick up any
-  // isVerified changes that may have been written while the user was away.
+  // Refresh profile once on mount so any `verified` update written by
+  // identity.wildsaura (or the admin panel) is picked up immediately.
   useEffect(() => {
     if (loading || !user || refreshed) return;
     refreshProfile().finally(() => setRefreshed(true));
-    // `refreshProfile` is a stable useCallback; safe to omit from deps.
+    // `refreshProfile` is stable; safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
 
+  // Check both field names: `isVerified` written by market, `verified`
+  // written by identity.wildsaura's syncVerificationStatus.
+  const isVerified = Boolean(
+    profile?.isVerified || (profile as Record<string, unknown>)?.verified
+  );
+
+  // Read the granular status written by identity.wildsaura.
+  const rawStatus = (profile as Record<string, unknown>)?.verificationStatus as
+    | string
+    | undefined;
+
+  const verificationStatus: SellerVerificationStatus = isVerified
+    ? "verified"
+    : (rawStatus as SellerVerificationStatus) || null;
+
   return {
-    /** `true` once profile is refreshed and `isVerified` is confirmed. */
-    isVerified: Boolean(profile?.isVerified),
-    /**
-     * `true` while auth is loading OR while the initial profile refresh
-     * is in progress. Render a loading indicator during this time.
-     */
+    /** True once the seller's identity is confirmed as verified. */
+    isVerified,
+    /** Granular status — use to show pending / rejected / not-started UI. */
+    verificationStatus,
+    /** True while auth is loading or the initial profile refresh is in flight. */
     checking: loading || (Boolean(user) && !refreshed),
   };
 }
