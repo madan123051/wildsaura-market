@@ -35,16 +35,17 @@ export function useVerificationGuard(_destinationPath: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
 
-  // Check both field names: `isVerified` written by market, `verified`
-  // written by identity.wildsaura's syncVerificationStatus.
+  // Cast through unknown first to satisfy TypeScript's overlap check.
+  // Both `isVerified` (market) and `verified` (identity.wildsaura) are read
+  // so the two apps stay in sync even though they share the same Firestore.
+  const profileAny = profile as unknown as Record<string, unknown>;
+
   const isVerified = Boolean(
-    profile?.isVerified || (profile as Record<string, unknown>)?.verified
+    profile?.isVerified || profileAny?.verified
   );
 
   // Read the granular status written by identity.wildsaura.
-  const rawStatus = (profile as Record<string, unknown>)?.verificationStatus as
-    | string
-    | undefined;
+  const rawStatus = profileAny?.verificationStatus as string | undefined;
 
   const verificationStatus: SellerVerificationStatus = isVerified
     ? "verified"
