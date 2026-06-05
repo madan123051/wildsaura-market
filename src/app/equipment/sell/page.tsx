@@ -28,6 +28,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useVerificationGuard } from "@/hooks/useVerificationGuard";
+import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
 import { EQUIPMENT_CATEGORIES } from "@/types";
 import type { EquipmentCategory, EquipmentCondition, EquipmentContactPreference, EquipmentListing } from "@/types";
 
@@ -74,9 +75,9 @@ export default function SellEquipmentPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      redirectToIdentityVerify(`${MARKET_URL}/equipment/sell`);
     }
-  }, [loading, router, user]);
+  }, [loading, user]);
 
   useEffect(() => {
     async function loadListing() {

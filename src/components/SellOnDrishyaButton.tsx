@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Camera, ChevronRight, ShieldCheck, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { redirectToDrishyaVerify, MARKET_URL } from "@/lib/drishya";
+import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
 import { useAuth } from "@/hooks/useAuth";
 
 export type SellOnDrishyaVariant = "hero" | "secondary" | "navbar" | "dashboard";
@@ -47,9 +47,9 @@ export function SellOnDrishyaButton({
   const handleClick = () => {
     onBeforeOpen?.();
 
-    // Not logged in → send to login with a redirect back to /upload
+    // Not logged in → redirect to Identity for login & verification
     if (!user) {
-      router.push("/login?redirect=/upload");
+      redirectToIdentityVerify(`${MARKET_URL}/upload`);
       return;
     }
 
@@ -59,8 +59,8 @@ export function SellOnDrishyaButton({
       return;
     }
 
-    // Not verified → redirect to Drishya verification
-    redirectToDrishyaVerify(`${MARKET_URL}/upload`);
+    // Not verified → redirect to Identity verification
+    redirectToIdentityVerify(`${MARKET_URL}/upload`);
   };
 
   return (
