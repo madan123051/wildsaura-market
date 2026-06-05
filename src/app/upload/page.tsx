@@ -872,7 +872,7 @@ export default function UploadPage() {
                 Complete Verification →
               </a>
               <p className="text-xs text-gray-400 mt-3">
-                You'll be redirected to WildSaura Identity and automatically brought back here after verification.
+                You&apos;ll be redirected to WildSaura Identity and automatically brought back here after verification.
               </p>
             </>
           )}
