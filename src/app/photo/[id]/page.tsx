@@ -166,7 +166,21 @@ function Lightbox({
           onContextMenu={(e) => e.preventDefault()}
           onDragStart={(e) => e.preventDefault()}
         />
-        {/* Block overlay */}
+        {/* Watermark overlay — must stay in sync with the main image watermark */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg">
+          <div className="flex flex-col gap-12 -rotate-[30deg]">
+            <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+              WildSaura &nbsp; WildSaura &nbsp; WildSaura
+            </span>
+            <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+              PREVIEW ONLY &nbsp; PREVIEW ONLY
+            </span>
+            <span className="select-none whitespace-nowrap font-heading text-3xl font-bold tracking-[0.2em] text-white/25 sm:text-4xl lg:text-5xl">
+              WildSaura &nbsp; WildSaura &nbsp; WildSaura
+            </span>
+          </div>
+        </div>
+        {/* Block overlay to prevent right-click save */}
         <div
           className="absolute inset-0 z-10"
           onContextMenu={(e) => e.preventDefault()}
