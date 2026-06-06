@@ -5,7 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatNPR(amount: number): string {
+export function formatNPR(amount: number | undefined | null): string {
+  if (amount == null || isNaN(amount as number)) return "NPR \u2014";
   return `NPR ${amount.toLocaleString("en-NP")}`;
 }
 
