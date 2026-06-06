@@ -316,7 +316,7 @@ export default function PhotoDetailPage() {
 
         // Resolution: Lumina might write "WxH" string, Market reads width/height
         if (raw.width == null && raw.resolution) {
-          const parts = String(raw.resolution).split(/[x×]/i);
+          const parts = String(raw.resolution).split(/[x\u00d7]/i);
           if (parts.length === 2) {
             raw.width = parseInt(parts[0], 10) || undefined;
             raw.height = parseInt(parts[1], 10) || undefined;
@@ -385,7 +385,7 @@ export default function PhotoDetailPage() {
   const handleAddToCart = useCallback(() => {
     if (!photo) return;
     if (inCart) {
-      toast("Already in your cart", { icon: "✓" });
+      toast("Already in your cart", { icon: "\u2713" });
       return;
     }
     const cart = getCartItems();
@@ -595,7 +595,7 @@ export default function PhotoDetailPage() {
                   <p className="text-sm font-semibold text-brand-dark">
                     {photo.photographerName || photo.ownerName || "Unknown Photographer"}
                   </p>
-                  <p className="text-xs text-gray-500">View Portfolio →</p>
+                  <p className="text-xs text-gray-500">View Portfolio \u2192</p>
                 </div>
               </Link>
 
@@ -692,7 +692,7 @@ export default function PhotoDetailPage() {
                   {inCart ? (
                     <>
                       <ShoppingCart className="h-4 w-4" />
-                      In Cart ✓
+                      In Cart \u2713
                     </>
                   ) : (
                     <>
@@ -741,7 +741,7 @@ export default function PhotoDetailPage() {
               </p>
               <p className="text-sm text-gray-500">Wildlife & Nature Photographer</p>
               {photo.copyrightNotice && (
-                <p className="mt-1 text-xs text-gray-400">© {photo.copyrightNotice}</p>
+                <p className="mt-1 text-xs text-gray-400">\u00a9 {photo.copyrightNotice}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -871,7 +871,7 @@ export default function PhotoDetailPage() {
                   <div>
                     <p className="text-xs font-medium text-gray-400">Dimensions</p>
                     <p className="text-sm font-medium text-brand-dark">
-                      {photo.width} × {photo.height}
+                      {photo.width} \u00d7 {photo.height}
                     </p>
                   </div>
                 </div>
@@ -913,7 +913,13 @@ export default function PhotoDetailPage() {
               )}
               {photo.gpsCoordinates && (
                 <p className="ml-7 text-xs text-gray-400">
-                  GPS: {photo.gpsCoordinates.lat.toFixed(6)}, {photo.gpsCoordinates.lng.toFixed(6)}
+                  GPS:{" "}
+                  {typeof photo.gpsCoordinates.lat === "number"
+                    ? photo.gpsCoordinates.lat.toFixed(6)
+                    : photo.gpsCoordinates.lat}{", "}
+                  {typeof photo.gpsCoordinates.lng === "number"
+                    ? photo.gpsCoordinates.lng.toFixed(6)
+                    : photo.gpsCoordinates.lng}
                 </p>
               )}
             </div>
@@ -989,7 +995,7 @@ export default function PhotoDetailPage() {
                   <Shield className="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-400" />
                   <div>
                     <p className="text-sm text-gray-500">Copyright Notice</p>
-                    <p className="text-sm font-medium text-brand-dark">© {photo.copyrightNotice}</p>
+                    <p className="text-sm font-medium text-brand-dark">\u00a9 {photo.copyrightNotice}</p>
                   </div>
                 </div>
               )}
