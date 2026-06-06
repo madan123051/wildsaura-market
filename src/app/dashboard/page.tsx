@@ -129,15 +129,16 @@ export default function DashboardPage() {
         const purchasesQuery = query(
           purchasesRef,
           where("userId", "==", user.uid),
-          orderBy("purchasedAt", "desc"),
           limit(20)
         );
         const purchasesSnap = await getDocs(purchasesQuery);
-        const purchasesList = purchasesSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          purchasedAt: doc.data().purchasedAt?.toDate() || new Date(),
-        })) as PurchaseRecord[];
+        const purchasesList = purchasesSnap.docs
+          .map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            purchasedAt: doc.data().purchasedAt?.toDate() || new Date(),
+          }))
+          .sort((a: any, b: any) => b.purchasedAt - a.purchasedAt) as PurchaseRecord[];
         setPurchases(purchasesList);
 
         // Fetch downloads
@@ -145,7 +146,6 @@ export default function DashboardPage() {
         const downloadsQuery = query(
           downloadsRef,
           where("userId", "==", user.uid),
-          orderBy("downloadedAt", "desc"),
           limit(20)
         );
         const downloadsSnap = await getDocs(downloadsQuery);
@@ -193,13 +193,16 @@ export default function DashboardPage() {
         const myPhotosRef = collection(db, "photos");
         const myPhotosQuery = query(
           myPhotosRef,
-          where("ownerId", "==", user.uid),
-          orderBy("createdAt", "desc")
+          where("ownerId", "==", user.uid)
         );
         const myPhotosSnap = await getDocs(myPhotosQuery);
-        const myPhotosList = myPhotosSnap.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as StockPhoto)
-        );
+        const myPhotosList = myPhotosSnap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() } as StockPhoto))
+          .sort((a: any, b: any) => {
+            const aDate = a.createdAt?.toDate?.() ?? a.createdAt ?? new Date(0);
+            const bDate = b.createdAt?.toDate?.() ?? b.createdAt ?? new Date(0);
+            return bDate - aDate;
+          });
         setMyListings(myPhotosList);
 
         // Fetch MY EQUIPMENT LISTINGS
