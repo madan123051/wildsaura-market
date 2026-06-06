@@ -230,13 +230,14 @@ export default function DashboardPage() {
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
+        toast.error("Failed to load your listings. Please refresh.");
       } finally {
         setDataLoading(false);
       }
     }
 
     fetchData();
-  }, [user]);
+  }, [user, searchParams]);
 
   // ─── Open Edit Modal ────────────────────────────────────
   const openEditModal = (photo: StockPhoto) => {
