@@ -363,13 +363,17 @@ export default function PhotoDetailPage() {
             collection(db, "photos"),
             where("category", "==", data.category),
             where("status", "==", "approved"),
-            limit(5)
+            limit(12) // fetch extra to account for client-side filtering
           );
           const relSnap = await getDocs(q);
           const relPhotos: StockPhoto[] = [];
           relSnap.forEach((d) => {
-            if (d.id !== photoId) {
-              relPhotos.push({ id: d.id, ...d.data() } as StockPhoto);
+            const pData = d.data();
+            // Skip current photo and any photos without a sale price —
+            // portfolio/identity photos from other WildSaura apps share the
+            // same Firebase project but have no priceNPR set.
+            if (d.id !== photoId && (pData.priceNPR || 0) > 0) {
+              relPhotos.push({ id: d.id, ...pData } as StockPhoto);
             }
           });
           if (!cancelled) setRelated(relPhotos.slice(0, 4));
