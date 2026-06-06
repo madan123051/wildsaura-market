@@ -2,24 +2,16 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDoc,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import {
   EQUIPMENT_CATEGORIES,
   type EquipmentCategory,
   type EquipmentCondition,
-  type EquipmentListing,
 } from "@/types";
 
 interface AIRecognitionResult {
@@ -45,12 +37,14 @@ interface FormData {
   imagePreviews: string[];
 }
 
+const STEP_INFO = [
+  { num: 1, label: "Photos", icon: "📷" },
+  { num: 2, label: "Details", icon: "✏️" },
+  { num: 3, label: "Publish", icon: "🚀" },
+];
+
 export default function SellPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const editId = searchParams.get("edit");
-  const isEditing = Boolean(editId);
-
   const { user, profile, loading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -58,10 +52,9 @@ export default function SellPage() {
   const [aiResult, setAiResult] = useState<AIRecognitionResult | null>(null);
   const [tagInput, setTagInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loadingListing, setLoadingListing] = useState(Boolean(editId));
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     title: "",
@@ -80,72 +73,19 @@ export default function SellPage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+    if (!user) { router.push("/login"); return; }
     if (profile && !profile.isVerified) {
       redirectToIdentityVerify(`${MARKET_URL}/shopping/sell`);
       return;
     }
   }, [user, profile, loading, router]);
 
-  // Load existing listing when editing
-  useEffect(() => {
-    async function loadListing() {
-      if (!editId || !user) return;
-      setLoadingListing(true);
-      try {
-        const snapshot = await getDoc(doc(db, "equipmentListings", editId));
-        if (!snapshot.exists()) {
-          setError("Listing not found.");
-          setLoadingListing(false);
-          return;
-        }
-        const data = snapshot.data() as EquipmentListing;
-        if (data.sellerId !== user.uid) {
-          setError("You can only edit your own listings.");
-          setLoadingListing(false);
-          return;
-        }
-        setForm((prev) => ({
-          ...prev,
-          title: data.title || "",
-          description: data.description || "",
-          category: data.category || "other",
-          price: String(data.priceNPR || ""),
-          condition: data.condition || "used",
-          brand: data.brand || "",
-          model: data.model || "",
-          yearPurchased: data.yearPurchased ? String(data.yearPurchased) : "",
-          location: data.location || "",
-          tags: data.tags || [],
-        }));
-        const imgs = data.imageUrls?.length
-          ? data.imageUrls
-          : data.thumbnailUrl
-          ? [data.thumbnailUrl]
-          : [];
-        setExistingImageUrls(imgs);
-        setStep(2); // Jump straight to details step when editing
-      } catch (err) {
-        console.error("Error loading listing:", err);
-        setError("Failed to load listing.");
-      } finally {
-        setLoadingListing(false);
-      }
-    }
-    loadListing();
-  }, [editId, user]);
-
-  if (loading || loadingListing) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-cyan-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">
-            {loadingListing ? "Loading listing..." : "Checking verification..."}
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
+          <p className="text-gray-400 text-sm">Checking verification…</p>
         </div>
       </div>
     );
@@ -154,22 +94,20 @@ export default function SellPage() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    const newImages = Array.from(files);
-    const newPreviews = newImages.map((file) => URL.createObjectURL(file));
+    const newImages = Array.from(files).slice(0, 5 - form.images.length);
+    const newPreviews = newImages.map((f) => URL.createObjectURL(f));
     setForm((prev) => ({
       ...prev,
       images: [...prev.images, ...newImages],
       imagePreviews: [...prev.imagePreviews, ...newPreviews],
     }));
-    if (newImages.length > 0 && !aiResult) {
-      await analyzeImage(newImages[0]);
-    }
+    if (newImages.length > 0 && !aiResult) await analyzeImage(newImages[0]);
   };
 
-  const analyzeImage = async (_file: File) => {
+  const analyzeImage = async (file: File) => {
     setIsAnalyzing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
       const mockResult: AIRecognitionResult = {
         itemName: "Professional Digital Camera",
         category: "camera",
@@ -191,7 +129,7 @@ export default function SellPage() {
       }));
       setStep(2);
     } catch {
-      setError("Failed to analyze image. Please try again.");
+      setError("Failed to analyze image.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -205,10 +143,6 @@ export default function SellPage() {
     }));
   };
 
-  const removeExistingImage = (index: number) => {
-    setExistingImageUrls((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const addTag = () => {
     if (tagInput.trim() && form.tags.length < 5) {
       setForm((prev) => ({ ...prev, tags: [...prev.tags, tagInput.trim()] }));
@@ -217,42 +151,28 @@ export default function SellPage() {
   };
 
   const removeTag = (index: number) => {
-    setForm((prev) => ({
-      ...prev,
-      tags: prev.tags.filter((_, i) => i !== index),
-    }));
+    setForm((prev) => ({ ...prev, tags: prev.tags.filter((_, i) => i !== index) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasImages = form.images.length > 0 || existingImageUrls.length > 0;
-    if (!form.title || !form.price || !hasImages) {
+    if (!form.title || !form.price || form.images.length === 0) {
       setError("Please fill all required fields and upload at least one image");
       return;
     }
-    if (!user || !profile) {
-      setError("You must be logged in to publish a listing.");
-      return;
-    }
+    if (!user || !profile) { setError("You must be logged in."); return; }
     setIsSubmitting(true);
     setError("");
     try {
-      const uploadedUrls: string[] = [];
+      const imageUrls: string[] = [];
       const timestamp = Date.now();
       for (let i = 0; i < form.images.length; i++) {
         const file = form.images[i];
-        const storageRef = ref(
-          storage,
-          `equipmentListings/${user.uid}/${timestamp}/${i}_${file.name}`
-        );
+        const storageRef = ref(storage, `equipmentListings/${user.uid}/${timestamp}/${i}_${file.name}`);
         const snapshot = await uploadBytes(storageRef, file);
-        const downloadUrl = await getDownloadURL(snapshot.ref);
-        uploadedUrls.push(downloadUrl);
+        imageUrls.push(await getDownloadURL(snapshot.ref));
       }
-
-      const allImageUrls = [...existingImageUrls, ...uploadedUrls];
-
-      const listingData = {
+      await addDoc(collection(db, "equipmentListings"), {
         sellerId: user.uid,
         sellerName: profile.displayName || user.displayName || "Anonymous",
         sellerAvatar: profile.avatarUrl || user.photoURL || "",
@@ -262,8 +182,8 @@ export default function SellPage() {
         category: form.category,
         priceNPR: Number(form.price),
         condition: form.condition,
-        imageUrls: allImageUrls,
-        thumbnailUrl: allImageUrls[0] || "",
+        imageUrls,
+        thumbnailUrl: imageUrls[0],
         brand: form.brand || "",
         model: form.model || "",
         yearPurchased: form.yearPurchased ? Number(form.yearPurchased) : null,
@@ -274,336 +194,367 @@ export default function SellPage() {
         salesCount: 0,
         status: "active",
         isVerified: profile.isVerified || false,
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      };
-
-      if (isEditing && editId) {
-        await updateDoc(doc(db, "equipmentListings", editId), listingData);
-        setSuccess("✅ Listing updated successfully!");
-      } else {
-        await addDoc(collection(db, "equipmentListings"), {
-          ...listingData,
-          createdAt: serverTimestamp(),
-        });
-        setSuccess("🎉 Listing published successfully!");
-      }
-
-      setTimeout(() => { router.refresh(); router.push("/dashboard?tab=equipment"); }, 2000);
+      });
+      setSuccess("🎉 Listing published!");
+      setTimeout(() => router.push("/shopping"), 2000);
     } catch (err) {
-      console.error("Error publishing listing:", err);
+      console.error(err);
       setError("Failed to publish listing. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const allPreviews = [...existingImageUrls, ...form.imagePreviews];
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white py-8 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent mb-2">
-            {isEditing ? "Edit Listing" : "Start Selling"}
+    <div className="min-h-screen bg-[#0a0a0f] text-white">
+      {/* Top gradient bar */}
+      <div className="h-1 w-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500" />
+
+      <div className="max-w-2xl mx-auto px-4 py-12">
+        {/* Header */}
+        <div className="mb-10 text-center">
+          <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-violet-400 via-fuchsia-300 to-cyan-400 bg-clip-text text-transparent">
+            Sell Equipment
           </h1>
-          <p className="text-gray-600">
-            {isEditing
-              ? "Update your equipment listing details"
-              : "List your photography equipment and reach buyers instantly"}
-          </p>
+          <p className="text-gray-500 mt-2 text-sm">Reach thousands of photographers in minutes</p>
         </div>
 
-        {!isEditing && (
-          <div className="flex justify-between mb-10">
-            {[1, 2, 3].map((s) => (
-              <div key={s} className="flex-1 flex items-center">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                    s <= step
-                      ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white"
-                      : "bg-gray-200 text-gray-600"
-                  }`}
-                >
-                  {s}
+        {/* Step Indicator */}
+        <div className="flex items-center justify-center gap-0 mb-10">
+          {STEP_INFO.map((s, idx) => (
+            <div key={s.num} className="flex items-center">
+              <button
+                onClick={() => { if (step > s.num) setStep(s.num as 1 | 2 | 3); }}
+                className="flex flex-col items-center gap-1 transition-all"
+              >
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold transition-all duration-300 ${
+                  step === s.num
+                    ? "bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-lg shadow-violet-500/30 scale-110"
+                    : step > s.num
+                    ? "bg-gradient-to-br from-violet-700/40 to-fuchsia-700/40 text-violet-300"
+                    : "bg-white/5 text-gray-600"
+                }`}>
+                  {step > s.num ? "✓" : s.icon}
                 </div>
-                <div
-                  className={`flex-1 h-1 mx-2 ${
-                    s < step
-                      ? "bg-gradient-to-r from-blue-600 to-cyan-600"
-                      : "bg-gray-200"
-                  }`}
-                ></div>
-              </div>
-            ))}
+                <span className={`text-xs font-semibold transition-colors ${step >= s.num ? "text-gray-300" : "text-gray-600"}`}>
+                  {s.label}
+                </span>
+              </button>
+              {idx < STEP_INFO.length - 1 && (
+                <div className={`w-16 h-px mx-2 mb-4 transition-all duration-500 ${step > s.num ? "bg-gradient-to-r from-violet-500 to-fuchsia-500" : "bg-white/10"}`} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Alerts */}
+        {error && (
+          <div className="mb-6 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-6 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-semibold">
+            {success}
           </div>
         )}
 
-        <div className="text-center mb-8">
-          {step === 1 && <h2 className="text-2xl font-bold text-gray-800">📷 Upload Images</h2>}
-          {step === 2 && <h2 className="text-2xl font-bold text-gray-800">🔍 {isEditing ? "Edit Details" : "Review & Edit Details"}</h2>}
-          {step === 3 && <h2 className="text-2xl font-bold text-gray-800">✅ Review & {isEditing ? "Update" : "Publish"}</h2>}
-        </div>
-
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">{error}</div>
-        )}
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">{success}</div>
-        )}
-
-        {/* STEP 1: Image Upload (new listings only) */}
-        {step === 1 && !isEditing && (
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
+        {/* STEP 1: Photos */}
+        {step === 1 && (
+          <div className="space-y-6">
             <div
-              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("border-blue-500", "bg-blue-50"); }}
-              onDragLeave={(e) => { e.currentTarget.classList.remove("border-blue-500", "bg-blue-50"); }}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
               onDrop={(e) => {
                 e.preventDefault();
-                e.currentTarget.classList.remove("border-blue-500", "bg-blue-50");
+                setDragOver(false);
                 const files = e.dataTransfer.files;
-                if (files) handleImageUpload({ target: { files } } as React.ChangeEvent<HTMLInputElement>);
+                if (files) handleImageUpload({ target: { files } } as any);
               }}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer hover:border-blue-400 transition"
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative cursor-pointer rounded-2xl border-2 border-dashed transition-all duration-300 p-12 text-center ${
+                dragOver
+                  ? "border-violet-400 bg-violet-500/10"
+                  : "border-white/10 bg-white/[0.03] hover:border-violet-500/40 hover:bg-white/[0.05]"
+              }`}
             >
-              <div className="text-5xl mb-4">📸</div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Drag & drop your photos</h3>
-              <p className="text-gray-600 mb-4">or click to browse (up to 5 images)</p>
-              <input ref={fileInputRef} type="file" multiple accept="image/*" onChange={handleImageUpload} className="hidden" />
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-semibold hover:shadow-lg transition">
-                Browse Files
-              </button>
+              <div className="flex flex-col items-center gap-3 pointer-events-none">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 flex items-center justify-center text-3xl">
+                  📸
+                </div>
+                <div>
+                  <p className="font-bold text-white text-lg">Drop photos here</p>
+                  <p className="text-gray-500 text-sm mt-1">or click to browse · up to 5 images</p>
+                </div>
+                <div className="mt-2 px-5 py-2 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-sm font-semibold">
+                  Browse Files
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
+              />
             </div>
 
             {form.imagePreviews.length > 0 && (
-              <div className="mt-8">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">Uploaded Images ({form.imagePreviews.length}/5)</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="bg-white/[0.03] rounded-2xl border border-white/10 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-sm font-semibold text-gray-300">{form.imagePreviews.length}/5 photos added</p>
+                  {form.imagePreviews.length < 5 && (
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs text-violet-400 hover:text-violet-300 font-semibold">
+                      + Add more
+                    </button>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
                   {form.imagePreviews.map((preview, idx) => (
-                    <div key={idx} className="relative group">
-                      <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-32 object-cover rounded-lg" />
-                      <button type="button" onClick={() => removeImage(idx)}
-                        className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition">✕</button>
+                    <div key={idx} className="relative group aspect-square">
+                      <img src={preview} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover rounded-xl" />
+                      {idx === 0 && (
+                        <span className="absolute bottom-1 left-1 text-[10px] bg-violet-600 text-white px-1.5 py-0.5 rounded font-bold">Cover</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeImage(idx)}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg"
+                      >✕</button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            <div className="mt-8 flex gap-4">
-              <button type="button"
-                onClick={() => { if (form.imagePreviews.length > 0) setStep(2); else setError("Please upload at least one image"); }}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-semibold hover:shadow-lg transition disabled:opacity-50"
-                disabled={form.imagePreviews.length === 0 || isAnalyzing}>
-                {isAnalyzing ? "Analyzing..." : "Next: Edit Details"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (form.imagePreviews.length > 0) setStep(2);
+                else setError("Please upload at least one photo");
+              }}
+              disabled={isAnalyzing}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold text-lg hover:shadow-2xl hover:shadow-violet-500/20 transition-all disabled:opacity-40"
+            >
+              {isAnalyzing ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Analyzing image…
+                </span>
+              ) : "Continue to Details →"}
+            </button>
           </div>
         )}
 
-        {/* STEP 2: Edit Details */}
+        {/* STEP 2: Details */}
         {step === 2 && (
-          <form onSubmit={(e) => { e.preventDefault(); setStep(3); }} className="bg-white rounded-xl shadow-lg p-8 mb-6 space-y-6">
+          <form onSubmit={(e) => { e.preventDefault(); setStep(3); }} className="space-y-5">
             {aiResult && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm font-semibold text-blue-900">🤖 AI Recognition:</p>
-                <p className="text-sm text-blue-800">Detected: <strong>{aiResult.itemName}</strong> (Confidence: {Math.round(aiResult.confidence * 100)}%)</p>
-                <p className="text-xs text-blue-700 mt-2">All fields below are editable</p>
-              </div>
-            )}
-
-            {isEditing && existingImageUrls.length > 0 && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Current Images</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {existingImageUrls.map((url, idx) => (
-                    <div key={idx} className="relative group">
-                      <img src={url} alt={`Image ${idx + 1}`} className="w-full h-24 object-cover rounded-lg" />
-                      <button type="button" onClick={() => removeExistingImage(idx)}
-                        className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
-                    </div>
-                  ))}
+              <div className="px-4 py-3 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-sm flex gap-3">
+                <span className="text-lg">🤖</span>
+                <div>
+                  <p className="font-semibold">AI detected: <span className="text-white">{aiResult.itemName}</span></p>
+                  <p className="text-violet-400 text-xs mt-0.5">All fields are editable below</p>
                 </div>
-              </div>
-            )}
-
-            {isEditing && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Add More Images</label>
-                <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center hover:border-blue-300 hover:bg-blue-50/60">
-                  <span className="text-2xl mb-1">📷</span>
-                  <span className="text-sm text-gray-500">Click to add images</span>
-                  <input type="file" accept="image/*" multiple className="sr-only" onChange={handleImageUpload} />
-                </label>
-                {form.imagePreviews.length > 0 && (
-                  <div className="mt-3 grid grid-cols-3 gap-3">
-                    {form.imagePreviews.map((preview, idx) => (
-                      <div key={idx} className="relative group">
-                        <img src={preview} alt={`New ${idx + 1}`} className="w-full h-24 object-cover rounded-lg" />
-                        <button type="button" onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition text-xs">✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Title *</label>
-              <input type="text" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., Canon EOS 6D Mark II" />
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Title *</label>
+              <input
+                type="text"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 focus:bg-white/[0.07] transition"
+                placeholder="e.g. Canon EOS 6D Mark II"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as EquipmentCategory })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Category *</label>
+                <select
+                  value={form.category}
+                  onChange={(e) => setForm({ ...form, category: e.target.value as EquipmentCategory })}
+                  className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white focus:outline-none focus:border-violet-500/50 transition appearance-none"
+                >
                   {EQUIPMENT_CATEGORIES.map((cat) => (
-                    <option key={cat.value} value={cat.value}>{cat.label}</option>
+                    <option key={cat.value} value={cat.value} className="bg-[#1a1a2e]">{cat.label}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Price (NPR) *</label>
-                <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="45000" />
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Condition</label>
+                <select
+                  value={form.condition}
+                  onChange={(e) => setForm({ ...form, condition: e.target.value as EquipmentCondition })}
+                  className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white focus:outline-none focus:border-violet-500/50 transition appearance-none"
+                >
+                  <option value="like-new" className="bg-[#1a1a2e]">✨ Like New</option>
+                  <option value="used" className="bg-[#1a1a2e]">👍 Used</option>
+                  <option value="fair" className="bg-[#1a1a2e]">⚠️ Fair</option>
+                </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Condition</label>
-              <select value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value as EquipmentCondition })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="new">New</option>
-                <option value="like-new">Like New</option>
-                <option value="used">Used</option>
-                <option value="refurbished">Refurbished</option>
-              </select>
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Price (NPR) *</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₹</span>
+                <input
+                  type="number"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  className="w-full pl-8 pr-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition"
+                  placeholder="45,000"
+                />
+              </div>
+              {aiResult && (
+                <p className="text-xs text-gray-500 mt-1">Suggested: ₹{aiResult.priceRange.min.toLocaleString()} – ₹{aiResult.priceRange.max.toLocaleString()}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Brand</label>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Brand</label>
                 <input type="text" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Canon" />
+                  className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition"
+                  placeholder="Canon" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Model</label>
+                <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Model</label>
                 <input type="text" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., EOS 6D Mark II" />
+                  className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition"
+                  placeholder="EOS 6D Mark II" />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Description</label>
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4} placeholder="Describe the condition, any damage, included accessories..." />
+                className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition resize-none"
+                rows={4} placeholder="Condition, accessories included, any wear or damage…" />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Location</label>
               <input type="text" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., Kathmandu, Nepal" />
+                className="w-full px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition"
+                placeholder="Kathmandu, Nepal" />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Tags (up to 5)</label>
-              <div className="flex gap-2 mb-2">
+              <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Tags <span className="normal-case text-gray-600">(up to 5)</span></label>
+              <div className="flex gap-2">
                 <input type="text" value={tagInput} onChange={(e) => setTagInput(e.target.value)}
-                  onKeyPress={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Add a tag..." />
-                <button type="button" onClick={addTag} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg font-semibold hover:bg-gray-300 transition">Add</button>
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                  className="flex-1 px-4 py-3 rounded-xl bg-white/[0.05] border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50 transition"
+                  placeholder="wildlife, macro, sports…" />
+                <button type="button" onClick={addTag}
+                  className="px-4 py-3 rounded-xl bg-white/10 text-gray-300 font-semibold hover:bg-white/15 transition text-sm">Add</button>
               </div>
               {form.tags.length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mt-3">
                   {form.tags.map((tag, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-2">
+                    <span key={idx} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/15 text-violet-300 text-xs font-semibold border border-violet-500/20">
                       {tag}
-                      <button type="button" onClick={() => removeTag(idx)} className="text-blue-600 hover:text-blue-800 font-bold">✕</button>
+                      <button type="button" onClick={() => removeTag(idx)} className="hover:text-white transition">✕</button>
                     </span>
                   ))}
                 </div>
               )}
             </div>
 
-            <div className="flex gap-4 pt-4">
-              {!isEditing && (
-                <button type="button" onClick={() => setStep(1)}
-                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-50 transition">
-                  Back
-                </button>
-              )}
-              <button type="submit" className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg font-semibold hover:shadow-lg transition">
-                Review Listing
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setStep(1)}
+                className="flex-1 py-3.5 rounded-2xl border border-white/10 text-gray-400 font-semibold hover:bg-white/5 transition">
+                ← Back
+              </button>
+              <button type="submit"
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-bold hover:shadow-2xl hover:shadow-violet-500/20 transition-all">
+                Preview Listing →
               </button>
             </div>
           </form>
         )}
 
-        {/* STEP 3: Review & Publish/Update */}
+        {/* STEP 3: Review & Publish */}
         {step === 3 && (
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Images</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {allPreviews.map((preview, idx) => (
-                <img key={idx} src={preview} alt={`Item ${idx + 1}`} className="w-full h-24 object-cover rounded-lg" />
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-6 mb-8">
-              <div><p className="text-sm text-gray-600">Title</p><p className="font-bold text-gray-800">{form.title}</p></div>
-              <div><p className="text-sm text-gray-600">Price</p><p className="font-bold text-lg text-green-600">NPR {form.price}</p></div>
-              <div><p className="text-sm text-gray-600">Category</p><p className="font-bold text-gray-800">{form.category}</p></div>
-              <div><p className="text-sm text-gray-600">Condition</p><p className="font-bold text-gray-800">{form.condition}</p></div>
-              <div><p className="text-sm text-gray-600">Brand</p><p className="font-bold text-gray-800">{form.brand || "—"}</p></div>
-              <div><p className="text-sm text-gray-600">Model</p><p className="font-bold text-gray-800">{form.model || "—"}</p></div>
-            </div>
-
-            {form.description && (
-              <div className="mb-8">
-                <p className="text-sm text-gray-600">Description</p>
-                <p className="text-gray-800 leading-relaxed">{form.description}</p>
-              </div>
-            )}
-
-            {form.tags.length > 0 && (
-              <div className="mb-8">
-                <p className="text-sm text-gray-600 mb-2">Tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {form.tags.map((tag, idx) => (
-                    <span key={idx} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">{tag}</span>
-                  ))}
+          <div className="space-y-6">
+            {/* Preview Card */}
+            <div className="rounded-2xl overflow-hidden border border-white/10 bg-white/[0.03]">
+              {form.imagePreviews.length > 0 && (
+                <div className="relative aspect-video w-full bg-black/40 overflow-hidden">
+                  <img src={form.imagePreviews[0]} alt="Cover" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  {form.imagePreviews.length > 1 && (
+                    <div className="absolute bottom-3 left-3 flex gap-2">
+                      {form.imagePreviews.slice(1).map((p, i) => (
+                        <img key={i} src={p} alt="" className="w-10 h-10 rounded-lg object-cover border-2 border-white/20" />
+                      ))}
+                    </div>
+                  )}
+                  <div className="absolute top-3 right-3 px-3 py-1 rounded-full bg-black/50 backdrop-blur text-white text-xs font-bold border border-white/20">
+                    {form.condition === "like-new" ? "✨ Like New" : form.condition === "used" ? "👍 Used" : "⚠️ Fair"}
+                  </div>
                 </div>
+              )}
+              <div className="p-6">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">{form.title || "—"}</h2>
+                    {(form.brand || form.model) && (
+                      <p className="text-gray-500 text-sm mt-0.5">{form.brand} {form.model}</p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-2xl font-black bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
+                      ₹{Number(form.price || 0).toLocaleString()}
+                    </p>
+                    <p className="text-gray-600 text-xs">NPR</p>
+                  </div>
+                </div>
+                {form.description && <p className="text-gray-400 text-sm leading-relaxed mb-4">{form.description}</p>}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-center gap-2 text-gray-500"><span>📂</span><span>{form.category}</span></div>
+                  {form.location && <div className="flex items-center gap-2 text-gray-500"><span>📍</span><span>{form.location}</span></div>}
+                </div>
+                {form.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {form.tags.map((tag, i) => (
+                      <span key={i} className="px-2.5 py-1 rounded-full bg-white/5 text-gray-500 text-xs border border-white/10">#{tag}</span>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-              <h4 className="font-bold text-blue-900 mb-3">Before {isEditing ? "Updating" : "Publishing"}:</h4>
-              <ul className="space-y-2 text-blue-800 text-sm">
-                <li>✓ All photos are clear and well-lit</li>
-                <li>✓ Item description is accurate and detailed</li>
-                <li>✓ Price is competitive and fair</li>
-                <li>✓ You have photographed equipment, not someone else&apos;s</li>
+            {/* Checklist */}
+            <div className="px-5 py-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/15">
+              <p className="text-xs font-bold text-emerald-400 uppercase tracking-wide mb-3">Pre-publish checklist</p>
+              <ul className="space-y-2 text-sm text-gray-400">
+                {["Photos are clear and well-lit", "Description is accurate and honest", "Price is fair and competitive", "Equipment is yours to sell"].map((item, i) => (
+                  <li key={i} className="flex items-center gap-2"><span className="text-emerald-400 font-bold">✓</span>{item}</li>
+                ))}
               </ul>
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <button type="button" onClick={() => setStep(2)}
-                className="flex-1 px-6 py-3 border border-gray-300 text-gray-800 rounded-lg font-semibold hover:bg-gray-50 transition">
-                Edit Details
+                className="flex-1 py-3.5 rounded-2xl border border-white/10 text-gray-400 font-semibold hover:bg-white/5 transition">
+                ← Edit
               </button>
-              <button onClick={handleSubmit} disabled={isSubmitting || !profile}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg font-semibold hover:shadow-lg transition disabled:opacity-50">
-                {isSubmitting ? (isEditing ? "Updating..." : "Publishing...") : (isEditing ? "✅ Update Listing" : "🎉 Publish Listing")}
+              <button onClick={handleSubmit} disabled={isSubmitting}
+                className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-bold text-lg hover:shadow-2xl hover:shadow-emerald-500/20 transition-all disabled:opacity-40">
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Publishing…
+                  </span>
+                ) : "🚀 Publish Now"}
               </button>
             </div>
           </div>
