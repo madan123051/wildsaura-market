@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useVerificationGuard } from "@/hooks/useVerificationGuard";
 import { redirectToIdentityVerify, MARKET_URL } from "@/lib/identity";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -46,6 +47,7 @@ const STEP_INFO = [
 export default function SellPage() {
   const router = useRouter();
   const { user, profile, loading } = useAuth();
+  const { verificationStatus, checking } = useVerificationGuard("/shopping/sell");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -72,20 +74,43 @@ export default function SellPage() {
   });
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || checking) return;
     if (!user) { router.push("/login"); return; }
-    if (profile && !profile.isVerified) {
+    if (verificationStatus === "not_started" || verificationStatus === "rejected") {
       redirectToIdentityVerify(`${MARKET_URL}/shopping/sell`);
       return;
     }
-  }, [user, profile, loading, router]);
+  }, [user, loading, checking, verificationStatus, router]);
 
-  if (loading) {
+  if (loading || checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
           <p className="text-gray-400 text-sm">Checking verification…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationStatus === "pending") {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center">
+        <div className="max-w-md mx-auto text-center px-6">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-4xl mx-auto mb-6">
+            ⏳
+          </div>
+          <h1 className="text-2xl font-bold mb-3">Verification Under Review</h1>
+          <p className="text-gray-400 mb-8 leading-relaxed">
+            Your identity verification is being reviewed by the WildSaura team.
+            You&apos;ll be able to list equipment once approved — this usually takes 24–48 hours.
+          </p>
+          <button
+            onClick={() => router.push("/shopping")}
+            className="px-6 py-3 rounded-xl bg-white/10 text-white font-semibold hover:bg-white/15 transition"
+          >
+            ← Browse Equipment
+          </button>
         </div>
       </div>
     );
