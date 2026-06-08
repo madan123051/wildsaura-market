@@ -47,9 +47,12 @@ export function useVerificationGuard(_destinationPath: string) {
   // Read the granular status written by identity.wildsaura.
   const rawStatus = profileAny?.verificationStatus as string | undefined;
 
+  // If the profile is loaded but has no verificationStatus field, treat it
+  // as "not_started" so the sell-page useEffect redirect fires immediately.
+  // Only return null while the profile is still loading (profile === null).
   const verificationStatus: SellerVerificationStatus = isVerified
     ? "verified"
-    : (rawStatus as SellerVerificationStatus) || null;
+    : (rawStatus as SellerVerificationStatus) || (profile ? "not_started" : null);
 
   return {
     /** True once the seller's identity is confirmed as verified. */

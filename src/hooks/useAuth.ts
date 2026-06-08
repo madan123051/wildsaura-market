@@ -13,7 +13,7 @@ import {
   User,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDocFromServer, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, getDocFromServer, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import type { UserProfile } from "@/types";
@@ -45,7 +45,19 @@ export function useAuth(): AuthState & AuthActions {
   // in-memory cache.  This is critical for the verification guard: a user
   // returning from identity.wildsaura.com must see the latest
   // verified / isVerified values, not a stale cached copy.
+  // Cache-first fetch — used in onAuthStateChanged so the initial page load
+  // never hangs waiting for a live server round-trip.
   const fetchProfile = useCallback(async (uid: string) => {
+    const ref  = doc(db, "users", uid);
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      setProfile(snap.data() as UserProfile);
+    }
+  }, []);
+
+  // Server-only fetch — used by refreshProfile so the verification guard
+  // always reads the latest value written by identity.wildsaura.
+  const fetchProfileFromServer = useCallback(async (uid: string) => {
     const ref  = doc(db, "users", uid);
     const snap = await getDocFromServer(ref);
     if (snap.exists()) {
@@ -186,7 +198,7 @@ export function useAuth(): AuthState & AuthActions {
   };
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.uid);
+    if (user) await fetchProfileFromServer(user.uid);
   };
 
   return { user, profile, loading, error, loginWithEmail, signupWithEmail, loginWithGoogle, logout, refreshProfile };
