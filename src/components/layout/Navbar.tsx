@@ -141,7 +141,7 @@ function Navbar() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" className="flex items-center flex-shrink-0">
-            <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
+            <Image src="/icon.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
           </Link>
 
           {/* Desktop Nav */}
