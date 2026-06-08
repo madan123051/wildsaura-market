@@ -13,7 +13,7 @@ import {
   User,
   updateProfile,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDocFromServer, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import type { UserProfile } from "@/types";
@@ -41,9 +41,13 @@ export function useAuth(): AuthState & AuthActions {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
+  // Always read directly from the Firestore server to bypass the SDK's
+  // in-memory cache.  This is critical for the verification guard: a user
+  // returning from identity.wildsaura.com must see the latest
+  // verified / isVerified values, not a stale cached copy.
   const fetchProfile = useCallback(async (uid: string) => {
     const ref  = doc(db, "users", uid);
-    const snap = await getDoc(ref);
+    const snap = await getDocFromServer(ref);
     if (snap.exists()) {
       setProfile(snap.data() as UserProfile);
     }
@@ -56,7 +60,8 @@ export function useAuth(): AuthState & AuthActions {
     avatarUrl?: string
   ) => {
     const ref = doc(db, "users", uid);
-    const snap = await getDoc(ref);
+    // Use getDocFromServer so a freshly-verified profile is never missed.
+    const snap = await getDocFromServer(ref);
     if (!snap.exists()) {
       const newProfile: Omit<UserProfile, "createdAt"> & { createdAt: unknown } = {
         uid,
