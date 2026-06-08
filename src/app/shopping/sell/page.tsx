@@ -116,6 +116,18 @@ export default function SellPage() {
     );
   }
 
+  // Render guard: only show the sell form to fully verified users.
+  // not_started / rejected users are redirected in the useEffect above,
+  // but we also block the render so the form is never visible even for
+  // the brief moment before the redirect fires.
+  if (verificationStatus !== "verified") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+        <div className="w-12 h-12 rounded-full border-2 border-transparent border-t-violet-500 animate-spin" />
+      </div>
+    );
+  }
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
