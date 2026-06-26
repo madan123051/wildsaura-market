@@ -24,7 +24,7 @@ export default function ContactPage() {
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-card">
             <Mail className="h-7 w-7 text-brand-primary" />
             <h2 className="mt-4 font-semibold text-brand-dark">Email support</h2>
-            <p className="mt-2 text-sm text-gray-500">madan123050@gmail.com</p>
+            <p className="mt-2 text-sm text-gray-500">help@wildsaura.com</p>
           </div>
           <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-card">
             <MessageCircle className="h-7 w-7 text-brand-primary" />
