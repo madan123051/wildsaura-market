@@ -27,9 +27,13 @@ import {
   Tag,
   DollarSign,
   FileText,
+  FileArchive,
   AlertCircle,
   Camera,
   Upload,
+  Coins,
+  Gift,
+  Copy,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { CATEGORIES } from "@/types";
@@ -39,6 +43,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   orderBy,
   limit,
   doc,
@@ -49,6 +54,7 @@ import {
 import { db } from "@/lib/firebase";
 import { ref, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
+import { MAX_WILDSAURA_POINTS } from "@/lib/rewards";
 import type { EquipmentListing, StockPhoto } from "@/types";
 import toast from "react-hot-toast";
 
@@ -62,7 +68,42 @@ interface PurchaseRecord {
   status: "completed" | "pending" | "failed";
 }
 
-type TabKey = "overview" | "listings" | "equipment" | "purchases" | "downloads" | "favorites";
+interface BuyerOrderItem {
+  itemType?: "photo" | "equipment";
+  photoId?: string;
+  equipmentId?: string;
+  title: string;
+  thumbnailUrl: string;
+  priceNPR: number;
+  ownerName?: string;
+  sellerName?: string;
+  trackingStatus?: string;
+}
+
+interface BuyerOrder {
+  id: string;
+  items: BuyerOrderItem[];
+  totalNPR: number;
+  status: string;
+  paymentMethod: string;
+  paymentStatus?: string;
+  trackingStatus?: string;
+  transactionRef?: string;
+  createdAt: Date;
+  paidAt?: Date;
+}
+
+interface PointTransaction {
+  id: string;
+  type: string;
+  title: string;
+  description?: string;
+  points: number;
+  balanceAfter?: number;
+  createdAt: Date;
+}
+
+type TabKey = "overview" | "listings" | "equipment" | "purchases" | "downloads" | "points" | "favorites";
 
 const STATUS_BADGE: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800 border border-yellow-300",
@@ -76,7 +117,10 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [buyerOrders, setBuyerOrders] = useState<BuyerOrder[]>([]);
   const [downloads, setDownloads] = useState<StockPhoto[]>([]);
+  const [pointHistory, setPointHistory] = useState<PointTransaction[]>([]);
+  const [userPoints, setUserPoints] = useState(0);
   const [favorites, setFavorites] = useState<StockPhoto[]>([]);
   const [myListings, setMyListings] = useState<StockPhoto[]>([]);
   const [myEquipmentListings, setMyEquipmentListings] = useState<EquipmentListing[]>([]);
@@ -106,6 +150,7 @@ export default function DashboardPage() {
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [updatingEquipmentId, setUpdatingEquipmentId] = useState<string | null>(null);
+  const [downloadingPhotoId, setDownloadingPhotoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -114,7 +159,7 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (tabFromUrl && ["overview", "listings", "equipment", "purchases", "downloads", "favorites"].includes(tabFromUrl)) {
+    if (tabFromUrl && ["overview", "listings", "equipment", "purchases", "downloads", "points", "favorites"].includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
   }, [tabFromUrl]);
@@ -128,24 +173,55 @@ export default function DashboardPage() {
         const purchasesRef = collection(db, "purchases");
         const purchasesQuery = query(
           purchasesRef,
-          where("userId", "==", user.uid),
+          where("buyerId", "==", user.uid),
           limit(20)
         );
         const purchasesSnap = await getDocs(purchasesQuery);
         const purchasesList = purchasesSnap.docs
-          .map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            purchasedAt: doc.data().purchasedAt?.toDate() || new Date(),
-          }))
+          .map((purchaseDoc) => {
+            const data = purchaseDoc.data();
+            return {
+              id: purchaseDoc.id,
+              ...data,
+              price: Number(data.price || data.amountNPR || 0),
+              purchasedAt: data.purchasedAt?.toDate() || new Date(),
+            };
+          })
           .sort((a: any, b: any) => b.purchasedAt - a.purchasedAt) as PurchaseRecord[];
         setPurchases(purchasesList);
+
+        // Fetch buyer orders for payment + equipment tracking.
+        const ordersRef = collection(db, "orders");
+        const ordersQuery = query(
+          ordersRef,
+          where("buyerId", "==", user.uid),
+          limit(30)
+        );
+        const ordersSnap = await getDocs(ordersQuery);
+        const buyerOrderList = ordersSnap.docs
+          .map((orderDoc) => {
+            const data = orderDoc.data();
+            return {
+              id: orderDoc.id,
+              items: data.items || [],
+              totalNPR: data.totalNPR || 0,
+              status: data.status || "pending",
+              paymentMethod: data.paymentMethod || "",
+              paymentStatus: data.paymentStatus,
+              trackingStatus: data.trackingStatus,
+              transactionRef: data.transactionRef,
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+              paidAt: data.paidAt?.toDate?.(),
+            } as BuyerOrder;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        setBuyerOrders(buyerOrderList);
 
         // Fetch downloads
         const downloadsRef = collection(db, "downloads");
         const downloadsQuery = query(
           downloadsRef,
-          where("userId", "==", user.uid),
+          where("buyerId", "==", user.uid),
           limit(20)
         );
         const downloadsSnap = await getDocs(downloadsQuery);
@@ -189,6 +265,60 @@ export default function DashboardPage() {
           );
         }
 
+        // Fetch points balance + history
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const profilePoints = Number(userSnap.data()?.walletPoints || 0);
+        setUserPoints(profilePoints);
+
+        const pointsQuery = query(
+          collection(db, "pointTransactions"),
+          where("userId", "==", user.uid),
+          limit(50)
+        );
+        const pointsSnap = await getDocs(pointsQuery);
+        const pointList = pointsSnap.docs
+          .map((pointDoc) => {
+            const data = pointDoc.data();
+            return {
+              id: pointDoc.id,
+              type: data.type || "",
+              title: data.title || "Points earned",
+              description: data.description,
+              points: Number(data.points || 0),
+              balanceAfter: data.balanceAfter,
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+            } as PointTransaction;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        const latestBalance = pointList.find(
+          (item) => typeof item.balanceAfter === "number"
+        )?.balanceAfter;
+        const hasMatchingDebit = pointList.some(
+          (item) => item.points < 0 && item.balanceAfter === profilePoints
+        );
+
+        if (
+          typeof latestBalance === "number" &&
+          profilePoints < latestBalance &&
+          !hasMatchingDebit
+        ) {
+          setPointHistory([
+            {
+              id: "recovered-points-spend",
+              type: "purchase_spend",
+              title: "Points used",
+              description: `${latestBalance - profilePoints} points were used from your wallet.`,
+              points: profilePoints - latestBalance,
+              balanceAfter: profilePoints,
+              createdAt: new Date(),
+            },
+            ...pointList,
+          ]);
+        } else {
+          setPointHistory(pointList);
+        }
+
         // Fetch MY LISTINGS
         const myPhotosRef = collection(db, "photos");
         const myPhotosQuery = query(
@@ -223,10 +353,20 @@ export default function DashboardPage() {
         setMyEquipmentListings(myEquipmentList);
 
         // Calculate stats
+        const paidBuyerOrders = buyerOrderList.filter(
+          (order) =>
+            order.status === "paid" ||
+            order.paymentStatus === "verified" ||
+            order.paymentStatus === "paid"
+        );
+        const completedPurchases = purchasesList.filter(
+          (purchase) => purchase.status === "completed"
+        );
+        const orderTotalSpent = paidBuyerOrders.reduce((sum, order) => sum + (order.totalNPR || 0), 0);
         setStats({
-          totalPurchases: purchasesList.length,
+          totalPurchases: paidBuyerOrders.length || completedPurchases.length,
           totalDownloads: downloadsSnap.docs.length,
-          totalSpent: purchasesList.reduce((sum, p) => sum + (p.price || 0), 0),
+          totalSpent: orderTotalSpent || completedPurchases.reduce((sum, p) => sum + (p.price || 0), 0),
           favoriteCount: favSnap.docs.length,
           myListingsCount: myPhotosList.length,
           myEquipmentListingsCount: myEquipmentList.length,
@@ -385,6 +525,79 @@ export default function DashboardPage() {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
+  const handleDownloadPhoto = async (photo: StockPhoto) => {
+    if (!user) {
+      toast.error("Please log in to download");
+      return;
+    }
+
+    setDownloadingPhotoId(photo.id);
+    toast.loading("Preparing licensed download...", { id: `download-${photo.id}` });
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/download/${photo.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        toast.error(errorData.error || "Download failed", { id: `download-${photo.id}` });
+        return;
+      }
+
+      const licenseCode = res.headers.get("X-License-Code");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const disposition = res.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="?(.+?)"?$/);
+      const filename = filenameMatch
+        ? filenameMatch[1]
+        : `WildSaura_${photo.title || "photo"}.zip`;
+
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+
+      toast.success(
+        licenseCode ? `Download started. License: ${licenseCode}` : "Download started!",
+        { id: `download-${photo.id}`, duration: 6000 }
+      );
+    } catch (error) {
+      console.error("Dashboard download error:", error);
+      toast.error("Download failed. Please try again.", { id: `download-${photo.id}` });
+    } finally {
+      setDownloadingPhotoId(null);
+    }
+  };
+
+  const orderStatusMeta = (order: BuyerOrder) => {
+    if (order.status === "paid") {
+      return { label: "Paid", className: "bg-green-100 text-green-800", icon: CheckCircle };
+    }
+    if (order.status === "failed" || order.paymentStatus === "failed") {
+      return { label: "Payment Failed", className: "bg-red-100 text-red-800", icon: XCircle };
+    }
+    if (order.paymentMethod === "cash_on_delivery") {
+      return { label: "Order Placed", className: "bg-blue-100 text-blue-800", icon: Package };
+    }
+    return { label: "Awaiting Payment", className: "bg-yellow-100 text-yellow-800", icon: Clock };
+  };
+
+  const itemTrackingLabel = (item: BuyerOrderItem, order: BuyerOrder) => {
+    if (item.itemType === "equipment") {
+      if (order.status === "paid") return "Paid - seller will arrange handover";
+      if (order.paymentMethod === "cash_on_delivery") return "Reserved - pay seller on delivery/meet-up";
+      return "Waiting for payment";
+    }
+    if (order.status === "paid") return "Ready for licensed download";
+    return "Waiting for payment";
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -394,6 +607,10 @@ export default function DashboardPage() {
   }
 
   if (!user) return null;
+  const referralLink = typeof window !== "undefined"
+    ? `${window.location.origin}/login?ref=${user.uid}`
+    : "";
+  const pointProgress = Math.min(100, Math.round((userPoints / MAX_WILDSAURA_POINTS) * 100));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -434,7 +651,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
           <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -470,6 +687,17 @@ export default function DashboardPage() {
           </div>
           <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
             <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                <Coins className="w-5 h-5 text-amber-600" />
+              </div>
+              <span className="text-sm text-gray-500">Points</span>
+            </div>
+            <p className="text-2xl font-bold text-gray-900">
+              {userPoints}/250
+            </p>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+            <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-purple-600" />
               </div>
@@ -498,8 +726,9 @@ export default function DashboardPage() {
             { id: "overview" as const, label: "Overview", icon: Eye },
             { id: "listings" as const, label: "Photo Listings", icon: ImageIcon },
             { id: "equipment" as const, label: "My Equipment Listings", icon: Package },
-            { id: "purchases" as const, label: "Purchases", icon: ShoppingBag },
+            { id: "purchases" as const, label: "Orders & Tracking", icon: ShoppingBag },
             { id: "downloads" as const, label: "Downloads", icon: Download },
+            { id: "points" as const, label: "Points", icon: Coins },
             { id: "favorites" as const, label: "Favorites", icon: Heart },
           ] as const).map((tab) => (
             <button
@@ -969,29 +1198,115 @@ export default function DashboardPage() {
 
           ) : activeTab === "purchases" ? (
             <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Purchase History
-              </h3>
-              {purchases.length === 0 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Orders & Tracking
+                  </h3>
+                  <p className="text-sm text-gray-500">
+                    Track equipment orders, payment status, and photo download readiness.
+                  </p>
+                </div>
+                <Link
+                  href="/shopping"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                  <Package className="h-4 w-4" />
+                  Shop Equipment
+                </Link>
+              </div>
+
+              {buyerOrders.length === 0 && purchases.length === 0 ? (
                 <div className="text-center py-16">
                   <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    No purchases yet
+                    No orders yet
                   </h3>
                   <p className="text-gray-500 mb-4">
-                    Start exploring our collection of stunning photos
+                    Buy photos or equipment and your order tracking will appear here.
                   </p>
-                  <Link
-                    href="/explore"
-                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
-                  >
-                    <Search className="w-4 h-4" />
-                    Browse Photos
-                  </Link>
+                  <div className="flex flex-wrap justify-center gap-3">
+                    <Link
+                      href="/explore"
+                      className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                    >
+                      <Search className="w-4 h-4" />
+                      Browse Photos
+                    </Link>
+                    <Link
+                      href="/shopping"
+                      className="inline-flex items-center gap-2 border border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                    >
+                      <Package className="w-4 h-4" />
+                      Shop Equipment
+                    </Link>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {purchases.map((purchase) => (
+                <div className="space-y-4">
+                  {buyerOrders.map((order) => {
+                    const meta = orderStatusMeta(order);
+                    const StatusIcon = meta.icon;
+                    return (
+                      <div
+                        key={order.id}
+                        className="rounded-xl border border-gray-100 p-4 hover:border-gray-200 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 pb-3 mb-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-gray-900">Order #{order.id.slice(0, 8)}</p>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+                                <StatusIcon className="h-3.5 w-3.5" />
+                                {meta.label}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                              {formatDate(order.createdAt)} • {order.paymentMethod.replaceAll("_", " ")}
+                              {order.transactionRef ? ` • ${order.transactionRef}` : ""}
+                            </p>
+                          </div>
+                          <p className="text-lg font-bold text-emerald-700">Rs. {order.totalNPR}</p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {order.items.map((item, index) => (
+                            <div key={`${order.id}-${index}`} className="flex items-center gap-4">
+                              <div className="relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                                {item.thumbnailUrl ? (
+                                  <Image
+                                    src={item.thumbnailUrl}
+                                    alt={item.title}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center">
+                                    <Package className="h-6 w-6 text-gray-300" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="font-medium text-gray-900 truncate">{item.title}</p>
+                                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                    {item.itemType === "equipment" ? "Equipment" : "Photo"}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-500">{itemTrackingLabel(item, order)}</p>
+                                {(item.sellerName || item.ownerName) && (
+                                  <p className="text-xs text-gray-400">Seller: {item.sellerName || item.ownerName}</p>
+                                )}
+                              </div>
+                              <span className="text-sm font-semibold text-gray-900">Rs. {item.priceNPR}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {buyerOrders.length === 0 && purchases.map((purchase) => (
                     <div
                       key={purchase.id}
                       className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors"
@@ -1025,6 +1340,133 @@ export default function DashboardPage() {
               )}
             </div>
 
+          ) : activeTab === "points" ? (
+            <div className="p-6">
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div className="lg:col-span-1">
+                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-5">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                        <Coins className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-amber-700">WildSaura Points</p>
+                        <p className="text-3xl font-bold text-gray-900">
+                          {userPoints}/{MAX_WILDSAURA_POINTS}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-5 h-2 overflow-hidden rounded-full bg-white">
+                      <div
+                        className="h-full rounded-full bg-amber-500"
+                        style={{ width: `${pointProgress}%` }}
+                      />
+                    </div>
+                    <p className="mt-2 text-xs text-amber-700">
+                      Maximum {MAX_WILDSAURA_POINTS} points per user.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-gray-100 p-5">
+                    <h3 className="font-semibold text-gray-900">How to earn</h3>
+                    <div className="mt-4 space-y-3 text-sm text-gray-600">
+                      <div className="flex items-center justify-between">
+                        <span>First login</span>
+                        <span className="font-semibold text-emerald-700">+30</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Full verification</span>
+                        <span className="font-semibold text-emerald-700">+10</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Daily login, 30 days</span>
+                        <span className="font-semibold text-emerald-700">+2/day</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Referral joins</span>
+                        <span className="font-semibold text-emerald-700">+10</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Referral verifies</span>
+                        <span className="font-semibold text-emerald-700">+5</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl border border-gray-100 p-5">
+                    <div className="flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-emerald-600" />
+                      <h3 className="font-semibold text-gray-900">Referral link</h3>
+                    </div>
+                    <p className="mt-2 break-all rounded-xl bg-gray-50 p-3 text-xs text-gray-500">
+                      {referralLink}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(referralLink);
+                        toast.success("Referral link copied");
+                      }}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      <Copy className="h-4 w-4" />
+                      Copy Referral Link
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <div className="rounded-2xl border border-gray-100">
+                    <div className="border-b border-gray-100 p-5">
+                      <h3 className="text-lg font-semibold text-gray-900">Point History</h3>
+                      <p className="text-sm text-gray-500">
+                        Rewards, purchases, and point deductions appear here.
+                      </p>
+                    </div>
+                    {pointHistory.length === 0 ? (
+                      <div className="py-16 text-center">
+                        <Coins className="mx-auto mb-4 h-12 w-12 text-gray-300" />
+                        <p className="font-medium text-gray-900">No point history yet</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Your rewards will appear after your next login.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-gray-100">
+                        {pointHistory.map((item) => {
+                          const isDebit = item.points < 0;
+                          return (
+                          <div key={item.id} className="flex items-center gap-4 p-4">
+                            <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${
+                              isDebit ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
+                            }`}>
+                              <Coins className="h-5 w-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-gray-900">{item.title}</p>
+                              {item.description && (
+                                <p className="truncate text-sm text-gray-500">{item.description}</p>
+                              )}
+                              <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className={`text-lg font-bold ${isDebit ? "text-red-700" : "text-emerald-700"}`}>
+                                {isDebit ? item.points : `+${item.points}`}
+                              </p>
+                              {typeof item.balanceAfter === "number" && (
+                                <p className="text-xs text-gray-400">Balance {item.balanceAfter}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
           ) : activeTab === "downloads" ? (
             <div className="p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -1050,25 +1492,41 @@ export default function DashboardPage() {
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {downloads.map((photo) => (
-                    <Link
+                    <div
                       key={photo.id}
-                      href={`/photo/${photo.id}`}
-                      className="group rounded-xl overflow-hidden border border-gray-100 hover:shadow-md transition-all"
+                      className="group overflow-hidden rounded-xl border border-gray-100 bg-white hover:shadow-md transition-all"
                     >
-                      <div className="aspect-[4/3] relative">
-                        <Image
-                          src={photo.thumbnailUrl || photo.imageUrl}
-                          alt={photo.title}
-                          fill
-                          className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        />
-                      </div>
+                      <Link href={`/photo/${photo.id}`} className="block">
+                        <div className="aspect-[4/3] relative">
+                          <Image
+                            src={photo.thumbnailUrl || photo.imageUrl}
+                            alt={photo.title}
+                            fill
+                            className="object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        </div>
+                      </Link>
                       <div className="p-3">
-                        <p className="font-medium text-gray-900 text-sm truncate">
-                          {photo.title}
-                        </p>
+                        <Link href={`/photo/${photo.id}`} className="block">
+                          <p className="font-medium text-gray-900 text-sm truncate">
+                            {photo.title}
+                          </p>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDownloadPhoto(photo)}
+                          disabled={downloadingPhotoId === photo.id}
+                          className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {downloadingPhotoId === photo.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <FileArchive className="h-3.5 w-3.5" />
+                          )}
+                          Download ZIP
+                        </button>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                 </div>
               )}

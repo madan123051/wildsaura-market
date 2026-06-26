@@ -37,6 +37,24 @@ function saveCart(items: CartItem[]) {
   window.dispatchEvent(new CustomEvent("cart-updated"));
 }
 
+function getItemType(item: CartItem) {
+  return item.type || "photo";
+}
+
+function getItemId(item: CartItem) {
+  return getItemType(item) === "equipment" ? item.equipmentId || item.photoId : item.photoId;
+}
+
+function getItemHref(item: CartItem) {
+  return getItemType(item) === "equipment"
+    ? `/shopping/${item.equipmentId || item.photoId}`
+    : `/photo/${item.photoId}`;
+}
+
+function getSellerName(item: CartItem) {
+  return getItemType(item) === "equipment" ? item.sellerName : item.ownerName;
+}
+
 /* ═══════════════════════════ MAIN ═══════════════════════════ */
 
 export default function CartPage() {
@@ -59,8 +77,12 @@ export default function CartPage() {
 
   /* ── remove item ── */
   const removeItem = useCallback(
-    (photoId: string) => {
-      const updated = items.filter((i) => i.photoId !== photoId);
+    (itemToRemove: CartItem) => {
+      const removeType = getItemType(itemToRemove);
+      const removeId = getItemId(itemToRemove);
+      const updated = items.filter(
+        (i) => !(getItemType(i) === removeType && getItemId(i) === removeId)
+      );
       saveCart(updated);
       setItems(updated);
       toast.success("Removed from cart");
@@ -160,7 +182,7 @@ export default function CartPage() {
           <div className="space-y-4 lg:col-span-2">
             {items.map((item) => (
               <div
-                key={item.photoId}
+                key={`${getItemType(item)}:${getItemId(item)}`}
                 className="group flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-4 shadow-card transition-shadow hover:shadow-card-hover"
               >
                 {/* thumbnail */}
@@ -184,14 +206,17 @@ export default function CartPage() {
                 {/* info */}
                 <div className="flex-1 min-w-0">
                   <Link
-                    href={`/photo/${item.photoId}`}
+                    href={getItemHref(item)}
                     className="block truncate font-medium text-brand-dark transition hover:text-brand-primary"
                   >
                     {item.title}
                   </Link>
-                  {item.ownerName && (
+                  <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    {getItemType(item) === "equipment" ? "Equipment" : "Photo"}
+                  </span>
+                  {getSellerName(item) && (
                     <p className="mt-0.5 truncate text-sm text-gray-500">
-                      by {item.ownerName}
+                      by {getSellerName(item)}
                     </p>
                   )}
                   <p className="mt-1 text-lg font-bold text-brand-primary sm:hidden">
@@ -206,7 +231,7 @@ export default function CartPage() {
 
                 {/* remove */}
                 <button
-                  onClick={() => removeItem(item.photoId)}
+                  onClick={() => removeItem(item)}
                   className="flex-shrink-0 rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-brand-accent"
                   aria-label="Remove item"
                 >
@@ -271,7 +296,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Package className="h-4 w-4 text-brand-primary" />
-                  <span>Instant digital download</span>
+                  <span>Photo downloads and equipment order tracking</span>
                 </div>
               </div>
             </div>

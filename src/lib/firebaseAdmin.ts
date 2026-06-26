@@ -134,6 +134,10 @@ export const adminDb = {
     ensureApp();
     return admin.firestore().collection(...args);
   },
+  runTransaction: (...args: Parameters<admin.firestore.Firestore["runTransaction"]>) => {
+    ensureApp();
+    return admin.firestore().runTransaction(...args);
+  },
 } as admin.firestore.Firestore;
 
 export default admin;

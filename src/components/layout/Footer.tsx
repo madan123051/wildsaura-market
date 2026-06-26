@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { type ReactNode, useState } from "react";
-import { ChevronDown, Facebook, Instagram, Twitter, Youtube, Package, Camera } from "lucide-react";
+import { ChevronDown, Facebook, Instagram, Twitter, Youtube, Package, Camera, Coins, ShieldCheck } from "lucide-react";
 
 const EXPLORE_LINKS = [
   { label: "Nature", href: "/explore?category=nature" },
@@ -17,10 +17,11 @@ const EXPLORE_LINKS = [
 ];
 
 const COMPANY_LINKS = [
-  { label: "About Us", href: "#" },
-  { label: "Contact", href: "#" },
-  { label: "Terms of Service", href: "#" },
-  { label: "Privacy Policy", href: "#" },
+  { label: "About WildSaura", href: "/about" },
+  { label: "Contact", href: "/contact" },
+  { label: "Terms & Conditions", href: "/terms" },
+  { label: "Privacy Policy", href: "/privacy" },
+  { label: "Points & Rewards", href: "/points" },
 ];
 
 const PHOTOGRAPHER_LINKS = [
@@ -29,7 +30,9 @@ const PHOTOGRAPHER_LINKS = [
 ];
 
 const MARKETPLACE_LINKS = [
+  { label: "Buy Photos", href: "/explore" },
   { label: "Shop Equipment", href: "/shopping" },
+  { label: "My Downloads", href: "/downloads" },
 ];
 
 const SOCIAL_LINKS = [
@@ -105,6 +108,12 @@ function FooterLinkList({ links }: { links: FooterLink[] }) {
 }
 
 function Footer() {
+  const trustItems = [
+    { icon: Camera, label: "Verified photo marketplace" },
+    { icon: ShieldCheck, label: "Protected buyer downloads" },
+    { icon: Coins, label: "Points rewards for users" },
+  ];
+
   return (
     <footer className="bg-brand-dark text-white">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-14 lg:px-8">
@@ -112,11 +121,30 @@ function Footer() {
         <div className="sm:hidden">
           <div className="mb-4">
             <Link href="/" className="mb-3 flex items-center">
-              <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
+              <Image
+                src="/icon-transparent.png"
+                alt="WildSaura Market"
+                width={120}
+                height={80}
+                className="h-10 w-auto object-contain"
+                sizes="120px"
+              />
             </Link>
             <p className="mb-4 text-sm leading-relaxed text-gray-400">
-              Nepal&apos;s premier stock photography marketplace.
+              WildSaura helps buyers license Nepali photography and helps creators sell photos,
+              gear, and digital work from one marketplace.
             </p>
+            <div className="mb-4 space-y-2">
+              {trustItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.label} className="flex items-center gap-2 text-xs text-gray-400">
+                    <Icon className="h-4 w-4 text-brand-secondary" />
+                    <span>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
             <div className="flex items-center gap-3">
               {SOCIAL_LINKS.map((social) => {
                 const Icon = social.icon;
@@ -192,12 +220,30 @@ function Footer() {
           {/* Brand Column */}
           <div>
             <Link href="/" className="mb-4 flex items-center">
-              <Image src="/logo.png" alt="WildSaura Market" width={120} height={80} className="h-10 w-auto object-contain" />
+              <Image
+                src="/icon-transparent.png"
+                alt="WildSaura Market"
+                width={120}
+                height={80}
+                className="h-10 w-auto object-contain"
+                sizes="120px"
+              />
             </Link>
             <p className="mb-6 text-sm leading-relaxed text-gray-400">
-              Nepal&apos;s premier stock photography marketplace. Discover stunning visuals captured
-              by talented local photographers.
+              WildSaura is Nepal&apos;s photography marketplace for licensed photos, creator
+              portfolios, equipment listings, secure downloads, and user reward points.
             </p>
+            <div className="mb-6 space-y-2">
+              {trustItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <div key={item.label} className="flex items-center gap-2 text-xs text-gray-400">
+                    <Icon className="h-4 w-4 text-brand-secondary" />
+                    <span>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
             <div className="flex items-center gap-3">
               {SOCIAL_LINKS.map((social) => {
                 const Icon = social.icon;

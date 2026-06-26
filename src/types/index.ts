@@ -146,12 +146,19 @@ export interface EquipmentListing {
 }
 
 // ─── Cart ─────────────────────────────────────────────
+export type CartItemType = "photo" | "equipment";
+
 export interface CartItem {
+  type?: CartItemType;
   photoId: string;
+  equipmentId?: string;
   title: string;
   thumbnailUrl: string;
   priceNPR: number;
+  ownerId?: string;
   ownerName?: string;
+  sellerId?: string;
+  sellerName?: string;
 }
 
 export interface EquipmentCartItem {

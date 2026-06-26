@@ -157,12 +157,52 @@ export async function GET(req: NextRequest) {
       transactionRef: tid,
     });
 
-    // 2. Create download records + update salesCount + create purchase records
+    // 2. Fulfill each order item.
     const items = order.items || [];
     const buyerId = order.buyerId;
     const buyerEmail = order.buyerEmail || "";
 
     const promises = items.map(async (item: any) => {
+      if (item.itemType === "equipment") {
+        const equipmentId = item.equipmentId || item.photoId;
+        let sellerId = item.sellerId || "";
+        let sellerName = item.sellerName || "";
+
+        try {
+          const equipmentRef = adminDb.collection("equipmentListings").doc(equipmentId);
+          const equipmentSnap = await equipmentRef.get();
+          if (equipmentSnap.exists) {
+            const equipmentData = equipmentSnap.data()!;
+            sellerId = sellerId || equipmentData.sellerId || "";
+            sellerName = sellerName || equipmentData.sellerName || "";
+            await equipmentRef.update({
+              status: "sold",
+              salesCount: (equipmentData.salesCount || 0) + 1,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        } catch {}
+
+        await adminDb.collection("equipmentPurchases").add({
+          buyerId,
+          buyerEmail,
+          equipmentId,
+          equipmentTitle: item.title,
+          thumbnailUrl: item.thumbnailUrl,
+          sellerId,
+          sellerName,
+          amountNPR: item.priceNPR,
+          orderId: oid,
+          paymentMethod: "esewa",
+          transactionRef: tid,
+          status: "completed",
+          trackingStatus: "paid",
+          purchasedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return;
+      }
+
       // Fetch the actual high-res imageUrl from the photo document
       let imageUrl = "";
       let sellerId = "";

@@ -20,15 +20,26 @@ import {
   ShoppingBag,
   Package,
   Camera,
+  Bell,
+  Coins,
 } from "lucide-react";
 import { db, auth } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from "firebase/firestore";
 import { onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { clearSessionCookie } from "@/lib/session";
 import type { UserProfile, CartItem } from "@/types";
 import { CATEGORIES } from "@/types";
 
 const ADMIN_EMAIL = "madan123050@gmail.com";
+
+type UserNotification = {
+  id: string;
+  title: string;
+  message: string;
+  points?: number;
+  read?: boolean;
+  createdAt?: { seconds: number } | Date;
+};
 
 function Navbar() {
   const router = useRouter();
@@ -40,12 +51,16 @@ function Navbar() {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
   const [scrolled, setScrolled] = useState(false);
 
   const categoriesRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = user?.email === ADMIN_EMAIL || profile?.role === "admin";
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
 
   // Auth listener
   useEffect(() => {
@@ -62,10 +77,48 @@ function Navbar() {
         }
       } else {
         setProfile(null);
+        setNotifications([]);
       }
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+    async function fetchNotifications() {
+      try {
+        const snap = await getDocs(
+          query(
+            collection(db, "notifications"),
+            where("userId", "==", user!.uid),
+            limit(12)
+          )
+        );
+        const items = snap.docs
+          .map((notificationDoc) => ({
+            id: notificationDoc.id,
+            ...(notificationDoc.data() as Omit<UserNotification, "id">),
+          }))
+          .sort((a, b) => {
+            const aTime = a.createdAt && "seconds" in a.createdAt ? a.createdAt.seconds : 0;
+            const bTime = b.createdAt && "seconds" in b.createdAt ? b.createdAt.seconds : 0;
+            return bTime - aTime;
+          });
+        if (!cancelled) setNotifications(items);
+      } catch (error) {
+        console.warn("Failed to load notifications", error);
+      }
+    }
+
+    fetchNotifications();
+    const intervalId = window.setInterval(fetchNotifications, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [user]);
 
   // Cart count from localStorage
   useEffect(() => {
@@ -104,6 +157,9 @@ function Navbar() {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setShowUserMenu(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -129,6 +185,22 @@ function Navbar() {
     } catch {
       // silent fail
     }
+  };
+
+  const handleToggleNotifications = async () => {
+    const nextOpen = !showNotifications;
+    setShowNotifications(nextOpen);
+    if (!nextOpen || unreadCount === 0) return;
+
+    const unread = notifications.filter((notification) => !notification.read);
+    setNotifications((prev) =>
+      prev.map((notification) => ({ ...notification, read: true }))
+    );
+    await Promise.all(
+      unread.map((notification) =>
+        updateDoc(doc(db, "notifications", notification.id), { read: true }).catch(() => null)
+      )
+    );
   };
 
   return (
@@ -254,6 +326,74 @@ function Navbar() {
               )}
             </Link>
 
+            {user && (
+              <div className="relative hidden md:block" ref={notificationsRef}>
+                <button
+                  type="button"
+                  onClick={handleToggleNotifications}
+                  className="relative p-2 text-gray-500 hover:text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
+                  aria-label="Notifications"
+                >
+                  <Bell className="w-5 h-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 bg-brand-accent text-white text-[10px] font-bold rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-surface-border bg-white py-2 shadow-xl z-50">
+                    <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
+                      <p className="text-sm font-semibold text-brand-dark">Notifications</p>
+                      <Link
+                        href="/dashboard?tab=points"
+                        onClick={() => setShowNotifications(false)}
+                        className="text-xs font-medium text-brand-primary hover:underline"
+                      >
+                        Points
+                      </Link>
+                    </div>
+                    {notifications.length === 0 ? (
+                      <div className="px-4 py-6 text-center text-sm text-gray-500">
+                        No notifications yet
+                      </div>
+                    ) : (
+                      <div className="max-h-96 overflow-y-auto">
+                        {notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={`px-4 py-3 text-sm ${
+                              notification.read ? "bg-white" : "bg-emerald-50/70"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                                <Coins className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900">{notification.title}</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                                  {notification.message}
+                                </p>
+                                {notification.points ? (
+                                  <p className={`mt-1 text-xs font-semibold ${
+                                    notification.points < 0 ? "text-red-700" : "text-emerald-700"
+                                  }`}>
+                                    {notification.points > 0 ? "+" : ""}{notification.points} points
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* User Menu / Login */}
             {user ? (
               <div className="relative hidden md:block" ref={userMenuRef}>
@@ -334,6 +474,14 @@ function Navbar() {
                     >
                       <Download className="w-4 h-4" />
                       My Downloads
+                    </Link>
+                    <Link
+                      href="/dashboard?tab=points"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      <Coins className="w-4 h-4" />
+                      Points & Rewards
                     </Link>
 
                     {isAdmin && (
@@ -543,6 +691,14 @@ function Navbar() {
                   >
                     <Download className="w-4 h-4" />
                     My Downloads
+                  </Link>
+                  <Link
+                    href="/dashboard?tab=points"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <Coins className="w-4 h-4" />
+                    Points & Rewards
                   </Link>
                   {isAdmin && (
                     <Link

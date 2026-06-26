@@ -30,7 +30,24 @@ export function useVerificationGuard(_destinationPath: string) {
   // identity.wildsaura (or the admin panel) is picked up immediately.
   useEffect(() => {
     if (loading || !user || refreshed) return;
-    refreshProfile().finally(() => setRefreshed(true));
+    let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (active) setRefreshed(true);
+    }, 5000);
+
+    refreshProfile()
+      .catch((error) => {
+        console.warn("Profile refresh failed; using cached profile", error);
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        if (active) setRefreshed(true);
+      });
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+    };
     // `refreshProfile` is stable; safe to omit from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, user]);
@@ -59,7 +76,7 @@ export function useVerificationGuard(_destinationPath: string) {
     isVerified,
     /** Granular status — use to show pending / rejected / not-started UI. */
     verificationStatus,
-    /** True while auth is loading or the initial profile refresh is in flight. */
-    checking: loading || (Boolean(user) && !refreshed),
+    /** True while auth is loading or no usable profile has loaded yet. */
+    checking: loading || (Boolean(user) && !profile && !refreshed),
   };
 }

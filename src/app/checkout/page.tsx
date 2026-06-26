@@ -20,6 +20,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  runTransaction,
   updateDoc,
   increment,
   serverTimestamp,
@@ -27,7 +28,7 @@ import {
 import { onAuthStateChanged, User } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { cn, formatNPR } from "@/lib/utils";
-import type { CartItem, PaymentMethod, OrderItem } from "@/types";
+import type { CartItem, PaymentMethod } from "@/types";
 import toast, { Toaster } from "react-hot-toast";
 
 /* ───────────────────────── helpers ───────────────────────── */
@@ -47,6 +48,195 @@ function getCartItems(): CartItem[] {
 function clearCart() {
   localStorage.setItem(CART_KEY, JSON.stringify([]));
   window.dispatchEvent(new CustomEvent("cart-updated"));
+}
+
+function getItemType(item: CartItem) {
+  return item.type || "photo";
+}
+
+function getItemId(item: CartItem) {
+  return getItemType(item) === "equipment" ? item.equipmentId || item.photoId : item.photoId;
+}
+
+function getSellerName(item: CartItem) {
+  return getItemType(item) === "equipment" ? item.sellerName : item.ownerName;
+}
+
+async function completeWalletPointsPurchaseInBrowser({
+  user,
+  orderId,
+  orderItems,
+  total,
+}: {
+  user: User;
+  orderId: string;
+  orderItems: any[];
+  total: number;
+}) {
+  let balanceAfter = 0;
+  const pointsUsed = Math.round(total);
+  const transactionRef = `POINTS-LOCAL-${Date.now()}`;
+
+  await runTransaction(db, async (tx) => {
+    const userRef = doc(db, "users", user.uid);
+    const orderRef = doc(db, "orders", orderId);
+    const [userSnap, orderSnap] = await Promise.all([
+      tx.get(userRef),
+      tx.get(orderRef),
+    ]);
+
+    if (!orderSnap.exists()) {
+      throw new Error("Order not found");
+    }
+
+    const order = orderSnap.data();
+    if (order.buyerId !== user.uid) {
+      throw new Error("Unauthorized order");
+    }
+
+    const currentPoints = Number(userSnap.data()?.walletPoints || 0);
+    if (currentPoints < pointsUsed) {
+      throw new Error(`Insufficient points. You have ${currentPoints}, but need ${pointsUsed}.`);
+    }
+
+    const itemRefs = orderItems.map((item) => {
+      const itemType = item.itemType || "photo";
+      const itemId =
+        itemType === "equipment"
+          ? item.equipmentId || item.photoId
+          : item.photoId;
+      return itemId
+        ? doc(db, itemType === "equipment" ? "equipmentListings" : "photos", itemId)
+        : null;
+    });
+
+    const itemSnaps = await Promise.all(
+      itemRefs.map((ref) => (ref ? tx.get(ref) : Promise.resolve(null)))
+    );
+
+    balanceAfter = currentPoints - pointsUsed;
+    const timestamp = serverTimestamp();
+
+    tx.update(userRef, {
+      walletPoints: balanceAfter,
+      updatedAt: timestamp,
+    });
+
+    tx.update(orderRef, {
+      status: "paid",
+      paymentStatus: "verified",
+      trackingStatus: "paid",
+      paidAt: timestamp,
+      transactionRef,
+    });
+
+    tx.set(doc(collection(db, "pointTransactions")), {
+      userId: user.uid,
+      type: "purchase_spend",
+      title: "Purchase with points",
+      description: `Used ${pointsUsed} points for order ${orderId}`,
+      points: -pointsUsed,
+      balanceAfter,
+      orderId,
+      createdAt: timestamp,
+    });
+
+    tx.set(doc(collection(db, "notifications")), {
+      userId: user.uid,
+      title: "Points used",
+      message: `${pointsUsed} points were used for your WildSaura purchase.`,
+      points: -pointsUsed,
+      orderId,
+      read: false,
+      createdAt: timestamp,
+    });
+
+    orderItems.forEach((item, index) => {
+      const itemType = item.itemType || "photo";
+      const itemRef = itemRefs[index];
+      const itemSnap = itemSnaps[index];
+
+      if (itemType === "equipment") {
+        const equipmentId = item.equipmentId || item.photoId;
+        if (!equipmentId) return;
+
+        const equipmentData = itemSnap?.exists() ? itemSnap.data() : {};
+        const sellerId = item.sellerId || equipmentData.sellerId || "";
+        const sellerName = item.sellerName || equipmentData.sellerName || "";
+
+        if (itemRef && itemSnap?.exists()) {
+          tx.update(itemRef, {
+            status: "sold",
+            salesCount: Number(equipmentData.salesCount || 0) + 1,
+            updatedAt: timestamp,
+          });
+        }
+
+        tx.set(doc(collection(db, "equipmentPurchases")), {
+          buyerId: user.uid,
+          buyerEmail: user.email || "",
+          equipmentId,
+          equipmentTitle: item.title,
+          thumbnailUrl: item.thumbnailUrl,
+          sellerId,
+          sellerName,
+          amountNPR: item.priceNPR,
+          orderId,
+          paymentMethod: "wallet_points",
+          transactionRef,
+          status: "completed",
+          trackingStatus: "paid",
+          purchasedAt: timestamp,
+        });
+
+        return;
+      }
+
+      const photoId = item.photoId;
+      if (!photoId) return;
+
+      const photoData = itemSnap?.exists() ? itemSnap.data() : {};
+      const sellerId = photoData.ownerId || item.ownerId || "";
+      const sellerName =
+        photoData.photographerName ||
+        photoData.ownerName ||
+        item.ownerName ||
+        "";
+
+      tx.set(doc(collection(db, "downloads")), {
+        orderId,
+        photoId,
+        buyerId: user.uid,
+        imageUrl: photoData.imageUrl || "",
+        title: item.title,
+        thumbnailUrl: item.thumbnailUrl,
+        purchasedAt: timestamp,
+      });
+
+      if (itemRef && itemSnap?.exists()) {
+        tx.update(itemRef, {
+          salesCount: Number(photoData.salesCount || 0) + 1,
+        });
+      }
+
+      tx.set(doc(collection(db, "purchases")), {
+        buyerId: user.uid,
+        buyerEmail: user.email || "",
+        photoId,
+        photoTitle: item.title,
+        sellerId,
+        sellerName,
+        amountNPR: item.priceNPR,
+        orderId,
+        paymentMethod: "wallet_points",
+        transactionRef,
+        status: "completed",
+        purchasedAt: timestamp,
+      });
+    });
+  });
+
+  return { pointsUsed, balanceAfter };
 }
 
 /* ── payment methods ── */
@@ -77,10 +267,18 @@ const PAYMENT_METHODS: {
   {
     id: "wallet_points",
     name: "Wallet Points",
-    description: "Pay using your WildSaura points",
+    description: "Pay instantly with WildSaura points (1 point = NPR 1)",
     color: "text-amber-700",
     bgColor: "bg-amber-50",
     borderColor: "border-amber-500",
+  },
+  {
+    id: "cash_on_delivery",
+    name: "Cash on Delivery / Meet-up",
+    description: "Reserve equipment and pay the seller offline",
+    color: "text-blue-700",
+    bgColor: "bg-blue-50",
+    borderColor: "border-blue-500",
   },
 ];
 
@@ -114,6 +312,8 @@ export default function CheckoutPage() {
   const subtotal = items.reduce((sum, i) => sum + i.priceNPR, 0);
   const serviceFee = Math.round(subtotal * SERVICE_FEE_RATE);
   const total = subtotal + serviceFee;
+  const hasPhotoItems = items.some((item) => getItemType(item) === "photo");
+  const hasEquipmentItems = items.some((item) => getItemType(item) === "equipment");
 
   /* ── pay handler ── */
   const handlePayNow = useCallback(async () => {
@@ -121,14 +321,47 @@ export default function CheckoutPage() {
     setProcessing(true);
 
     try {
+      if (selectedPayment === "cash_on_delivery" && hasPhotoItems) {
+        toast.error("Cash on Delivery is only available for equipment orders.");
+        setProcessing(false);
+        return;
+      }
+
+      if (selectedPayment === "wallet_points") {
+        const userSnap = await getDoc(doc(db, "users", user.uid));
+        const walletPoints = Number(userSnap.data()?.walletPoints || 0);
+        if (walletPoints < total) {
+          toast.error(`You need ${total - walletPoints} more points to complete this order.`);
+          setProcessing(false);
+          return;
+        }
+      }
+
       /* 1. Build order items */
-      const orderItems: OrderItem[] = items.map((item) => ({
-        photoId: item.photoId,
-        title: item.title,
-        thumbnailUrl: item.thumbnailUrl,
-        priceNPR: item.priceNPR,
-        ownerId: "", // will be populated server-side in production
-      }));
+      const orderItems = items.map((item) => {
+        if (getItemType(item) === "equipment") {
+          return {
+            itemType: "equipment",
+            equipmentId: item.equipmentId || item.photoId,
+            title: item.title,
+            thumbnailUrl: item.thumbnailUrl,
+            priceNPR: item.priceNPR,
+            sellerId: item.sellerId || "",
+            sellerName: item.sellerName || "",
+            trackingStatus: "order_placed",
+          };
+        }
+
+        return {
+          itemType: "photo",
+          photoId: item.photoId,
+          title: item.title,
+          thumbnailUrl: item.thumbnailUrl,
+          priceNPR: item.priceNPR,
+          ownerId: item.ownerId || "",
+          ownerName: item.ownerName || "",
+        };
+      });
 
       /* 2. Create order (pending) */
       const orderRef = await addDoc(collection(db, "orders"), {
@@ -138,8 +371,30 @@ export default function CheckoutPage() {
         totalNPR: total,
         status: "pending",
         paymentMethod: selectedPayment,
+        itemTypes: Array.from(new Set(orderItems.map((item: any) => item.itemType))),
+        paymentStatus: selectedPayment === "cash_on_delivery" ? "cod_pending" : "pending",
+        trackingStatus: selectedPayment === "cash_on_delivery" ? "order_placed" : "awaiting_payment",
         createdAt: serverTimestamp(),
       });
+
+      if (selectedPayment === "cash_on_delivery") {
+        await Promise.all(
+          orderItems
+            .filter((item: any) => item.itemType === "equipment")
+            .map(async (item: any) => {
+              if (!item.equipmentId) return;
+              await updateDoc(doc(db, "equipmentListings", item.equipmentId), {
+                status: "sold",
+                salesCount: increment(1),
+                updatedAt: serverTimestamp(),
+              });
+            })
+        );
+        clearCart();
+        toast.success("Equipment order placed. Track it from your dashboard.");
+        router.push(`/dashboard?tab=purchases&order=${orderRef.id}`);
+        return;
+      }
 
       /* 3. Initiate eSewa payment */
       if (selectedPayment === "esewa") {
@@ -182,17 +437,68 @@ export default function CheckoutPage() {
         return; // Page will redirect to eSewa
       }
 
-      // For other payment methods (khalti, wallet) — show coming soon
+      if (selectedPayment === "wallet_points") {
+        toast.loading("Using WildSaura points...", { id: "wallet-points" });
+
+        let walletData: { pointsUsed: number; balanceAfter: number };
+        try {
+          const idToken = await user.getIdToken();
+          const walletRes = await fetch("/api/wallet-points", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${idToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ orderId: orderRef.id }),
+          });
+
+          const apiData = await walletRes.json();
+
+          if (!apiData.success) {
+            const apiError = new Error(apiData.error || "Failed to complete points payment");
+            (apiError as Error & { status?: number }).status = walletRes.status;
+            throw apiError;
+          }
+
+          walletData = apiData.data;
+        } catch (walletError) {
+          const status = (walletError as Error & { status?: number }).status;
+          if (status && status < 500) {
+            toast.dismiss("wallet-points");
+            throw walletError;
+          }
+
+          console.warn("Wallet points API unavailable; using client-side fallback.", walletError);
+          walletData = await completeWalletPointsPurchaseInBrowser({
+            user,
+            orderId: orderRef.id,
+            orderItems,
+            total,
+          });
+        }
+
+        toast.dismiss("wallet-points");
+        clearCart();
+        toast.success(`${walletData.pointsUsed || total} points used. Purchase complete!`);
+        router.push(
+          hasEquipmentItems
+            ? `/dashboard?tab=purchases&order=${orderRef.id}`
+            : `/dashboard?tab=downloads&order=${orderRef.id}`
+        );
+        return;
+      }
+
+      // For other payment methods (khalti) — show coming soon
       toast.error(`${PAYMENT_METHODS.find((m) => m.id === selectedPayment)?.name || "This payment method"} is coming soon! Please use eSewa.`);
       // Delete the pending order
       await updateDoc(doc(db, "orders", orderRef.id), { status: "cancelled" });
     } catch (error) {
       console.error("Checkout error:", error);
-      toast.error("Payment failed. Please try again.");
+      toast.error(error instanceof Error ? error.message : "Payment failed. Please try again.");
     } finally {
       setProcessing(false);
     }
-  }, [user, items, total, selectedPayment, router]);
+  }, [user, items, total, selectedPayment, router, hasPhotoItems, hasEquipmentItems]);
 
   /* ── loading ── */
   if (authLoading || !mounted) {
@@ -248,14 +554,14 @@ export default function CheckoutPage() {
           <h1 className="font-heading text-2xl font-bold text-brand-dark">
             No Items to Checkout
           </h1>
-          <p className="mt-2 text-gray-500">
-            Your cart is empty. Add some photos first!
+            <p className="mt-2 text-gray-500">
+            Your cart is empty. Add photos or equipment first!
           </p>
           <Link
-            href="/explore"
+            href="/shopping"
             className="mt-6 inline-flex items-center gap-2 rounded-xl bg-brand-primary px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand-primary/25 transition hover:bg-brand-primary/90"
           >
-            Browse Photos
+            Browse Equipment
           </Link>
         </div>
       </div>
@@ -319,11 +625,13 @@ export default function CheckoutPage() {
               </h2>
               <div className="space-y-3">
                 {PAYMENT_METHODS.map((method) => (
+                  method.id === "cash_on_delivery" && !hasEquipmentItems ? null : (
                   <button
                     key={method.id}
                     onClick={() => setSelectedPayment(method.id)}
+                    disabled={method.id === "cash_on_delivery" && hasPhotoItems}
                     className={cn(
-                      "flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition",
+                      "flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-50",
                       selectedPayment === method.id
                         ? cn(method.borderColor, method.bgColor)
                         : "border-gray-100 bg-white hover:border-gray-200 hover:bg-gray-50"
@@ -367,6 +675,16 @@ export default function CheckoutPage() {
                           )}
                         />
                       )}
+                      {method.id === "cash_on_delivery" && (
+                        <ShoppingCart
+                          className={cn(
+                            "h-5 w-5",
+                            selectedPayment === method.id
+                              ? "text-blue-600"
+                              : "text-gray-400"
+                          )}
+                        />
+                      )}
                     </div>
                     <div className="flex-1">
                       <p
@@ -380,7 +698,9 @@ export default function CheckoutPage() {
                         {method.name}
                       </p>
                       <p className="text-xs text-gray-500">
-                        {method.description}
+                        {method.id === "cash_on_delivery" && hasPhotoItems
+                          ? "Available only when your cart has equipment only"
+                          : method.description}
                       </p>
                     </div>
                     <div
@@ -397,12 +717,14 @@ export default function CheckoutPage() {
                             "h-2.5 w-2.5 rounded-full",
                             method.id === "esewa" && "bg-green-500",
                             method.id === "khalti" && "bg-purple-500",
-                            method.id === "wallet_points" && "bg-amber-500"
+                            method.id === "wallet_points" && "bg-amber-500",
+                            method.id === "cash_on_delivery" && "bg-blue-500"
                           )}
                         />
                       )}
                     </div>
                   </button>
+                  )
                 ))}
               </div>
             </div>
@@ -415,7 +737,7 @@ export default function CheckoutPage() {
               <div className="divide-y divide-gray-50">
                 {items.map((item) => (
                   <div
-                    key={item.photoId}
+                    key={`${getItemType(item)}:${getItemId(item)}`}
                     className="flex items-center gap-4 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-surface-muted">
@@ -432,9 +754,12 @@ export default function CheckoutPage() {
                       <p className="truncate text-sm font-medium text-brand-dark">
                         {item.title}
                       </p>
-                      {item.ownerName && (
+                      <span className="mt-1 inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                        {getItemType(item) === "equipment" ? "Equipment" : "Photo"}
+                      </span>
+                      {getSellerName(item) && (
                         <p className="text-xs text-gray-500">
-                          by {item.ownerName}
+                          by {getSellerName(item)}
                         </p>
                       )}
                     </div>
@@ -490,8 +815,12 @@ export default function CheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <Lock className="h-4 w-4" />
-                    Pay {formatNPR(total)}
+                  <Lock className="h-4 w-4" />
+                    {selectedPayment === "cash_on_delivery"
+                      ? "Place Equipment Order"
+                      : selectedPayment === "wallet_points"
+                        ? `Pay ${total} Points`
+                        : `Pay ${formatNPR(total)}`}
                   </>
                 )}
               </button>

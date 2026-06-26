@@ -267,7 +267,23 @@ export async function POST(req: Request) {
       parsed.tags = [];
     }
 
-    return NextResponse.json(parsed, { headers: CORS_HEADERS });
+    return NextResponse.json(
+      {
+        ...parsed,
+        isMarketable: parsed.is_marketable,
+        rejectionReason: parsed.rejection_reason,
+        suggestedTitle: parsed.title || "",
+        suggestedDescription: parsed.description || "",
+        suggestedTags: parsed.tags || [],
+        suggestedCategory: parsed.category,
+        suggestedLocation: parsed.location || "",
+        suggestedCountry: parsed.country || "",
+        suggestedPrice: parsed.price_npr || parsed.priceNPR || 100,
+        qualityScore: parsed.quality_score,
+        marketDemand: parsed.market_demand,
+      },
+      { headers: CORS_HEADERS }
+    );
   } catch (error) {
     console.error("AI Analysis Error:", error);
     return NextResponse.json(

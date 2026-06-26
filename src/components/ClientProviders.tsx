@@ -1,6 +1,7 @@
 "use client";
 
 import { Toaster } from "react-hot-toast";
+import RewardsInitializer from "@/components/RewardsInitializer";
 
 export default function ClientProviders({
   children,
@@ -21,6 +22,7 @@ export default function ClientProviders({
           },
         }}
       />
+      <RewardsInitializer />
       {children}
     </>
   );

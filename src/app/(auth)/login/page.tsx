@@ -2,17 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Mail, Lock, Eye, EyeOff, User } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { recordReferralJoin } from "@/lib/rewards";
 import toast from "react-hot-toast";
 
 type Mode = "login" | "signup";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { loginWithEmail, signupWithEmail, loginWithGoogle } = useAuth();
 
   const [mode,       setMode]       = useState<Mode>("login");
@@ -21,6 +23,13 @@ export default function LoginPage() {
   const [password,   setPassword]   = useState("");
   const [showPass,   setShowPass]   = useState(false);
   const [loading,    setLoading]    = useState(false);
+  const redirectTo = (() => {
+    const redirect = searchParams.get("redirect") || "/dashboard";
+    return redirect.startsWith("/") && !redirect.startsWith("//")
+      ? redirect
+      : "/dashboard";
+  })();
+  const referralCode = searchParams.get("ref") || searchParams.get("referral") || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +39,13 @@ export default function LoginPage() {
         await loginWithEmail(email, password);
         toast.success("Welcome back! 🎉");
       } else {
-        await signupWithEmail(name, email, password);
+        const newUser = await signupWithEmail(name, email, password);
+        if (referralCode) {
+          await recordReferralJoin(newUser, referralCode);
+        }
         toast.success("Account created! Start uploading 📷");
       }
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (err: unknown) {
       toast.error((err as Error).message ?? "Something went wrong");
     } finally {
@@ -44,7 +56,7 @@ export default function LoginPage() {
   const handleGoogle = async () => {
     try {
       await loginWithGoogle();
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch {
       toast.error("Google sign-in failed");
     }

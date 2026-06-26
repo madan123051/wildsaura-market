@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Heart,
   Share2,
@@ -22,6 +22,8 @@ import {
   Lock,
   BadgeCheck,
   ShoppingBag,
+  ShoppingCart,
+  CreditCard,
 } from "lucide-react";
 import {
   doc,
@@ -36,7 +38,24 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
-import type { EquipmentListing } from "@/types";
+import type { CartItem, EquipmentListing } from "@/types";
+import toast, { Toaster } from "react-hot-toast";
+
+const CART_KEY = "wildsaura_cart";
+
+function getCartItems(): CartItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveCart(items: CartItem[]) {
+  localStorage.setItem(CART_KEY, JSON.stringify(items));
+  window.dispatchEvent(new CustomEvent("cart-updated"));
+}
 
 interface EquipmentComment {
   id: string;
@@ -49,6 +68,7 @@ interface EquipmentComment {
 
 function EquipmentDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const equipmentId = params.id as string;
   const { user, profile } = useAuth();
 
@@ -56,6 +76,7 @@ function EquipmentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [liked, setLiked] = useState(false);
+  const [inCart, setInCart] = useState(false);
 
   const [comments, setComments] = useState<EquipmentComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -87,6 +108,20 @@ function EquipmentDetailPage() {
       }
     };
     if (equipmentId) fetchListing();
+  }, [equipmentId]);
+
+  useEffect(() => {
+    if (!equipmentId) return;
+    const updateCartState = () => {
+      setInCart(
+        getCartItems().some(
+          (item) => item.type === "equipment" && item.equipmentId === equipmentId
+        )
+      );
+    };
+    updateCartState();
+    window.addEventListener("cart-updated", updateCartState);
+    return () => window.removeEventListener("cart-updated", updateCartState);
   }, [equipmentId]);
 
   useEffect(() => {
@@ -171,6 +206,50 @@ function EquipmentDetailPage() {
   const formatPrice = (price: number) =>
     "₹" + price.toLocaleString("en-IN");
 
+  const addEquipmentToCart = (redirectToCheckout = false) => {
+    if (!listing) return;
+    if (!user) {
+      router.push(`/login?redirect=/shopping/${equipmentId}`);
+      return;
+    }
+    if (user.uid === listing.sellerId) {
+      toast.error("You cannot buy your own listing.");
+      return;
+    }
+    if (listing.status !== "active") {
+      toast.error("This equipment is not available for purchase.");
+      return;
+    }
+
+    const cart = getCartItems();
+    const exists = cart.some(
+      (item) => item.type === "equipment" && item.equipmentId === listing.id
+    );
+    if (!exists) {
+      saveCart([
+        ...cart,
+        {
+          type: "equipment",
+          photoId: listing.id,
+          equipmentId: listing.id,
+          title: listing.title,
+          thumbnailUrl: listing.thumbnailUrl || listing.imageUrls?.[0] || "",
+          priceNPR: listing.priceNPR,
+          sellerId: listing.sellerId,
+          sellerName: listing.sellerName,
+        },
+      ]);
+      setInCart(true);
+      toast.success(`"${listing.title}" added to cart`);
+    } else {
+      toast("Already in cart", { icon: "🛒" });
+    }
+
+    if (redirectToCheckout) {
+      router.push("/checkout");
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
@@ -216,6 +295,7 @@ function EquipmentDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
+      <Toaster position="top-right" />
       {/* Subtle top gradient bar */}
       <div className="h-px w-full bg-gradient-to-r from-transparent via-violet-500/50 to-transparent" />
 
@@ -346,24 +426,46 @@ function EquipmentDetailPage() {
             )}
 
             {/* Action Buttons */}
-            <div className="mt-auto flex gap-3 mb-3">
+            <div className="mt-auto space-y-3 mb-3">
               {!isSeller && (
-                <button
-                  onClick={() => { if (!user) { window.location.href = "/login"; return; } setShowMsgModal(true); }}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity shadow-lg shadow-violet-500/20"
-                >
-                  <Lock className="w-4 h-4" />Private Message
-                </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => addEquipmentToCart(false)}
+                    disabled={listing.status !== "active"}
+                    className="flex items-center justify-center gap-2 bg-white text-[#0a0a0f] py-3 rounded-xl font-bold hover:bg-violet-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    {inCart ? "In Cart" : "Add to Cart"}
+                  </button>
+                  <button
+                    onClick={() => addEquipmentToCart(true)}
+                    disabled={listing.status !== "active"}
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white py-3 rounded-xl font-bold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity shadow-lg shadow-violet-500/20"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Buy Now
+                  </button>
+                </div>
               )}
-              <button
-                onClick={() => setLiked(!liked)}
-                className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
-              >
-                <Heart className={`w-5 h-5 transition-colors ${liked ? "fill-red-500 text-red-500" : "text-white/50"}`} />
-              </button>
-              <button className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
-                <Share2 className="w-5 h-5 text-white/50" />
-              </button>
+              <div className="flex gap-3">
+                {!isSeller && (
+                  <button
+                    onClick={() => { if (!user) { router.push(`/login?redirect=/shopping/${equipmentId}`); return; } setShowMsgModal(true); }}
+                    className="flex-1 flex items-center justify-center gap-2 bg-white/5 border border-white/10 text-white py-3 rounded-xl font-semibold hover:bg-white/10 transition-colors"
+                  >
+                    <Lock className="w-4 h-4" />Private Message
+                  </button>
+                )}
+                <button
+                  onClick={() => setLiked(!liked)}
+                  className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors"
+                >
+                  <Heart className={`w-5 h-5 transition-colors ${liked ? "fill-red-500 text-red-500" : "text-white/50"}`} />
+                </button>
+                <button className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
+                  <Share2 className="w-5 h-5 text-white/50" />
+                </button>
+              </div>
             </div>
 
             {(listing.sellerEmail || listing.sellerPhone) && (

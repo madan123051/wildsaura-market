@@ -555,39 +555,27 @@ export default function UploadPage() {
       setStep("analyzing");
 
       try {
-        // Upload to Firebase Storage + AI Analysis in parallel
-        const uploadPromise = (async () => {
-          const fileExtension = fileToUpload.name.split(".").pop() || "jpg";
-          const fileName = `photos/${user?.uid}/${Date.now()}_${Math.random()
-            .toString(36)
-            .substring(2, 9)}.${fileExtension}`;
-          const storageRef = ref(storage, fileName);
-          await uploadBytes(storageRef, fileToUpload);
-          const downloadUrl = await getDownloadURL(storageRef);
-          return downloadUrl;
-        })();
-
-        const aiPromise = (async () => {
-          try {
-            const formData = new FormData();
-            formData.append("image", fileToUpload);
-            const res = await fetch("/api/ai-analyze", {
-              method: "POST",
-              body: formData,
-            });
-            if (!res.ok) throw new Error("AI analysis failed");
-            return (await res.json()) as AIAnalysis;
-          } catch {
-            return null;
-          }
-        })();
-
-        const [imageUrl, aiResult] = await Promise.all([
-          uploadPromise,
-          aiPromise,
-        ]);
-
+        const fileExtension = fileToUpload.name.split(".").pop() || "jpg";
+        const fileName = `photos/${user?.uid}/${Date.now()}_${Math.random()
+          .toString(36)
+          .substring(2, 9)}.${fileExtension}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, fileToUpload);
+        const imageUrl = await getDownloadURL(storageRef);
         setUploadedImageUrl(imageUrl);
+
+        let aiResult: AIAnalysis | null = null;
+        try {
+          const res = await fetch("/api/ai-analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl }),
+          });
+          if (!res.ok) throw new Error("AI analysis failed");
+          aiResult = (await res.json()) as AIAnalysis;
+        } catch {
+          aiResult = null;
+        }
 
         if (aiResult) {
           setAiAnalysis(aiResult);
@@ -798,7 +786,12 @@ export default function UploadPage() {
   if (loading || checking) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
+          <p className="text-sm font-medium text-gray-600">
+            Checking your seller account...
+          </p>
+        </div>
       </div>
     );
   }

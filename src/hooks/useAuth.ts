@@ -26,8 +26,8 @@ interface AuthState {
 }
 
 interface AuthActions {
-  loginWithEmail: (email: string, password: string) => Promise<void>;
-  signupWithEmail: (name: string, email: string, password: string) => Promise<void>;
+  loginWithEmail: (email: string, password: string) => Promise<User>;
+  signupWithEmail: (name: string, email: string, password: string) => Promise<User>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -130,7 +130,8 @@ export function useAuth(): AuthState & AuthActions {
   const loginWithEmail = async (email: string, password: string) => {
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      return cred.user;
     } catch (err: unknown) {
       setError((err as Error).message);
       throw err;
@@ -143,6 +144,7 @@ export function useAuth(): AuthState & AuthActions {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
       await createUserProfile(cred.user.uid, name, email);
+      return cred.user;
     } catch (err: unknown) {
       setError((err as Error).message);
       throw err;

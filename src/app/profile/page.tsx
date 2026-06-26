@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
-import { doc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDocs, limit, query, updateDoc, where } from "firebase/firestore";
 import { updateProfile as updateFirebaseProfile } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
@@ -17,8 +18,31 @@ import {
   Camera,
   Save,
   ArrowLeft,
+  CheckCircle,
+  Clock,
+  Package,
+  ShoppingBag,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+interface ProfileOrderItem {
+  itemType?: "photo" | "equipment";
+  title: string;
+  thumbnailUrl?: string;
+  priceNPR?: number;
+  trackingStatus?: string;
+}
+
+interface ProfileOrder {
+  id: string;
+  items: ProfileOrderItem[];
+  totalNPR: number;
+  status: string;
+  paymentMethod: string;
+  paymentStatus?: string;
+  trackingStatus?: string;
+  createdAt: Date;
+}
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -32,6 +56,8 @@ export default function ProfilePage() {
   const [facebook, setFacebook] = useState("");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [orders, setOrders] = useState<ProfileOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -49,6 +75,73 @@ export default function ProfilePage() {
       setAvatarPreview(profile.avatarUrl || "");
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const fetchOrders = async () => {
+      setOrdersLoading(true);
+      try {
+        const ordersQuery = query(
+          collection(db, "orders"),
+          where("buyerId", "==", user.uid),
+          limit(5)
+        );
+        const snapshot = await getDocs(ordersQuery);
+        const recentOrders = snapshot.docs
+          .map((orderDoc) => {
+            const data = orderDoc.data();
+            return {
+              id: orderDoc.id,
+              items: Array.isArray(data.items) ? data.items : [],
+              totalNPR: data.totalNPR || 0,
+              status: data.status || "pending",
+              paymentMethod: data.paymentMethod || "unknown",
+              paymentStatus: data.paymentStatus,
+              trackingStatus: data.trackingStatus,
+              createdAt: data.createdAt?.toDate?.() || new Date(),
+            } as ProfileOrder;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+        if (active) setOrders(recentOrders);
+      } catch (err) {
+        console.error("Failed to load profile orders", err);
+      } finally {
+        if (active) setOrdersLoading(false);
+      }
+    };
+
+    fetchOrders();
+    return () => {
+      active = false;
+    };
+  }, [user]);
+
+  const orderStatus = (order: ProfileOrder) => {
+    if (order.paymentStatus === "paid" || order.status === "completed") {
+      return {
+        label: order.trackingStatus === "delivered" ? "Delivered" : "Paid",
+        icon: CheckCircle,
+        className: "bg-emerald-50 text-emerald-700",
+      };
+    }
+
+    if (order.paymentMethod === "cash_on_delivery") {
+      return {
+        label: "COD placed",
+        icon: Clock,
+        className: "bg-blue-50 text-blue-700",
+      };
+    }
+
+    return {
+      label: "Payment pending",
+      icon: Clock,
+      className: "bg-amber-50 text-amber-700",
+    };
+  };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -231,6 +324,76 @@ export default function ProfilePage() {
               <p className="text-sm font-medium text-brand-dark capitalize">{profile.role}</p>
             </div>
           </div>
+        </div>
+
+        {/* Recent Orders */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-surface-border pb-2">
+            <h2 className="font-heading text-lg font-semibold text-brand-dark">
+              Order Tracking
+            </h2>
+            <Link href="/dashboard?tab=purchases" className="text-sm font-medium text-brand-primary hover:underline">
+              View all
+            </Link>
+          </div>
+
+          {ordersLoading ? (
+            <div className="flex items-center gap-3 rounded-xl bg-surface-muted px-4 py-4 text-sm text-gray-500">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-primary border-t-transparent" />
+              Loading recent orders...
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="rounded-xl bg-surface-muted px-4 py-5 text-sm text-gray-500">
+              <div className="flex items-center gap-3">
+                <ShoppingBag className="h-5 w-5 text-brand-primary" />
+                <span>No orders yet. Bought equipment and photos will appear here.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {orders.map((order) => {
+                const meta = orderStatus(order);
+                const StatusIcon = meta.icon;
+                const firstItem = order.items[0];
+
+                return (
+                  <Link
+                    key={order.id}
+                    href={`/dashboard?tab=purchases&order=${order.id}`}
+                    className="flex items-center gap-4 rounded-xl border border-surface-border px-4 py-3 hover:border-brand-primary/40 hover:bg-brand-primary/5 transition-colors"
+                  >
+                    <div className="relative h-14 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-surface-muted">
+                      {firstItem?.thumbnailUrl ? (
+                        <Image
+                          src={firstItem.thumbnailUrl}
+                          alt={firstItem.title}
+                          fill
+                          className="object-cover"
+                          sizes="64px"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Package className="h-5 w-5 text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-brand-dark">
+                        {firstItem?.title || `Order #${order.id.slice(0, 8)}`}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {order.items.length} item{order.items.length === 1 ? "" : "s"} • Rs. {order.totalNPR}
+                      </p>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+                      <StatusIcon className="h-3.5 w-3.5" />
+                      {meta.label}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Submit */}
